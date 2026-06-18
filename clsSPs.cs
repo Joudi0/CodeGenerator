@@ -8,6 +8,19 @@ namespace CodeGenarator
 {
     internal class clsSPs
     {
+
+        // Helpers
+
+        public static string makeCase(clsHelper.Column C)
+        {
+            string s = $@"
+                    CASE WHEN @SortColumn = '{C.name}' AND @Direction = 'ASC' THEN [{C.name}] END ASC,
+                    CASE WHEN @SortColumn = '{C.name}' AND @Direction = 'DESC' THEN [{C.name}] END DESC
+";
+            return s;
+        }
+
+        // Actual Stored Procedures
         private static string GetSPParameters(bool withFirstPar = false)
         {
             List<clsHelper.Column> cols = new List<clsHelper.Column>(clsHelper.Columns);
@@ -162,21 +175,35 @@ namespace CodeGenarator
             return SP;
         }
 
-
         public static string PagingSP()
         {
+            List<string> casesList = new List<string>();
+
+            foreach (clsHelper.Column C in clsHelper.mappedColumns)
+            {
+                casesList.Add(makeCase(C));
+            }
+            string allCases = string.Join(",\n\t\t\t\t", casesList);
+
             string SP = $@"
-            CREATE PROCEDURE [dbo].[SP_{clsHelper.tableName}_Paging]
-                    @RowsPerPage INT, @PageNumber INT
-            AS
-            BEGIN
-                SELECT * FROM {clsHelper.tableName} ORDER BY {clsHelper.Columns[0].name}
-                OFFSET (@PageNumber -1) * @RowsPerPage ROWS
-                FETCH NEXT @RowsPerPage ROWS ONLY;
-            END
-            ";
+    CREATE PROCEDURE [dbo].[SP_{clsHelper.tableName}_Paging]
+            @RowsPerPage INT, 
+            @PageNumber INT, 
+            @SortColumn NVARCHAR(128) = '{clsHelper.Columns[0].name}', 
+            @Direction NVARCHAR(4) = 'ASC'
+    AS
+    BEGIN
+        SELECT * FROM {clsHelper.tableName} 
+        ORDER BY 
+                {allCases}
+        OFFSET (@PageNumber -1) * @RowsPerPage ROWS
+        FETCH NEXT @RowsPerPage ROWS ONLY;
+    END
+    ";
             return SP;
         }
+
+
 
         public static string isExistByColumnSP(clsHelper.Column col)
         {

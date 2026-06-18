@@ -237,14 +237,17 @@ namespace CodeGenarator
             if (Columns.Count == 0) return "Error in the lists";
 
             string Function = $@"
-                    public static async Task<DataTable> PagingDAL(int RowsPerPage, int PageNumber)
+                    public static async Task<DataTable> PagingDAL(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
                     {{
                         DataTable dt = new DataTable();
                         using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
                         using SqlCommand command = new SqlCommand(""SP_{tableName}_Paging"", connection);
                         command.CommandType = CommandType.StoredProcedure;
                         command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);
-                        command.Parameters.AddWithValue(""@PageNumber"", PageNumber);
+                        command.Parameters.AddWithValue(""@PageNumber"", PageNumber);             
+                        command.Parameters.AddWithValue(""@SortColumn"", string.IsNullOrEmpty(SortColumn) ? (object)DBNull.Value : SortColumn);
+                        command.Parameters.AddWithValue(""@Direction"", string.IsNullOrEmpty(Direction) ? (object)DBNull.Value : Direction);    
+
 
                         try
                         {{

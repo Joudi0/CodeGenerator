@@ -291,9 +291,9 @@ namespace CodeGenarator
         {
             string FunctionName = "Paging";
             string Function = $@"
-            public static Task<DataTable> {FunctionName}(int RowsPerPage, int PageNumber)
+            public static Task<DataTable> {FunctionName}(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
             {{
-                return {DALName}.{FunctionName}(RowsPerPage, PageNumber);
+                return {DALName}.{FunctionName}(RowsPerPage, PageNumber, SortColumn, Direction);
             }}
 
 ";
