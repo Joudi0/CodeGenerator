@@ -27,7 +27,8 @@ namespace CodeGenarator
                     case "int": line += $@"{c.type} {c.name} = -1;"; break;
                     case "string": line += $@"{c.type} {c.name} = """";"; break;
                     case "DateTime": line += $@"{c.type} {c.name} = DateTime.Now;"; break;
-                    default: line += $@"int {c.name} = -1;"; break;
+                    default: line += $@"this.{c.type.Substring(3)} = new {c.type}();"; break;
+
 
                 }
             }
@@ -96,11 +97,7 @@ namespace CodeGenarator
             {
                 if(c.composition)
                 {
-
-                    string cleanName = c.name.Substring(0, c.name.Length - 2);
-                    cleanName = char.ToUpper(cleanName[0]) + cleanName.Substring(1);
-                    values += tabs + $@"this.{cleanName} = cls{cleanName}.get{cleanName}ByID({c.name});" + "\n";
-
+                    continue;
                 }
                 else values += tabs + $@"this.{c.name} = {c.name};" + "\n";
             }
@@ -109,6 +106,48 @@ namespace CodeGenarator
             return values;
         }
 
+        public static string asyncVariableValue()
+        {
+            string lines = "";
+            foreach(clsHelper.Column C in clsHelper.mappedColumns)
+            {
+                if (C.composition)
+                {
+                    string cleanName = C.name.Substring(0, C.name.Length - 2);
+                    cleanName = char.ToUpper(cleanName[0]) + cleanName.Substring(1);
+                    lines += tabs + $@"obj.{cleanName} = await cls{cleanName}.get{cleanName}ByID({C.name});" + "\n";
+                }
+            }
+            return lines;
+        }
+
+        public static string loadVarsFromRow()
+        {
+            string script = tabs + "DataRow row = dt.Rows[0];\n";
+
+            foreach (Column col in getColumnsForCsharp(Columns))
+            {
+                if (col.isNullable == "NO")
+                {
+                    script += tabs + $@"{col.type} {col.name} = ({col.type})row[""{col.name}""];" + "\n";
+                }
+                else if (col.isNullable == "YES")
+                {
+                    script += tabs;
+                    switch (col.type)
+                    {
+                        case "byte": script += $@"{col.type} {col.name} = (row[""{col.name}""] == DBNull.Value) ? (byte)0 : ({col.type})row[""{col.name}""];" + "\n"; break;
+                        case "decimal":
+                        case "int": script += $@"{col.type} {col.name} = (row[""{col.name}""] == DBNull.Value) ? -1 : ({col.type})row[""{col.name}""];" + "\n"; break;
+                        case "string": script += $@"{col.type} {col.name} = (row[""{col.name}""] == DBNull.Value) ? """" : ({col.type})row[""{col.name}""];" + "\n"; break;
+                        case "DateTime": script += $@"{col.type} {col.name} = (row[""{col.name}""] == DBNull.Value) ? DateTime.Now : ({col.type})row[""{col.name}""];" + "\n"; break;
+                        case "bool": script += $@"{col.type} {col.name} = (row[""{col.name}""] == DBNull.Value) ? false : ({col.type})row[""{col.name}""];" + "\n"; break;
+                        default: break;
+                    }
+                }
+            }
+            return script;
+        }
 
         // Actual Functions:
 
@@ -143,7 +182,7 @@ namespace CodeGenarator
             }
             else
             {
-                Constructors = $@"private {className}({writeParameters(0, false, true)})
+                Constructors = $@"private {className}({writeParameters(0, true)})
                 {{
 {thisValues()}
                 }}";
@@ -159,7 +198,7 @@ namespace CodeGenarator
                 FunctionName = $@"is{objectName}ExistByID";
             }
             else FunctionName = $@"is{objectName}ExistBy{C.name}";
-            string Function = $@"public static bool {FunctionName}({C.type} {C.name})
+            string Function = $@"public static Task<bool> {FunctionName}({C.type} {C.name})
             {{
                 return {DALName}.{FunctionName}({C.name});
                 
@@ -178,14 +217,14 @@ namespace CodeGenarator
             }
             else FunctionName = $@"get{objectName}By{C.name}";
             string Function = $@"
-            public static cls{objectName} {FunctionName}({C.type} {C.name})
+            public static async Task<cls{objectName}> {FunctionName}({C.type} {C.name})
             {{
-{initalVars(columnIndex)}
-                if({DALName}.{FunctionName}({writeParametersToSend(true, columnIndex)}))
-                {{
-                    return new cls{objectName}({getRawColumnNames()});
-                }}
-                    else return null;
+                DataTable dt = await {DALName}.{FunctionName}({C.name});
+                if (dt == null || dt.Rows.Count != 1) return null;
+                {loadVarsFromRow()}
+                var obj = new cls{objectName}({getRawColumnNames()});
+                {asyncVariableValue()}
+                return obj;
             }}
 ";
             return Function;
@@ -194,12 +233,11 @@ namespace CodeGenarator
         public static string addFunc()
         {
             string FunctionName = $@"_add{objectName}";
-            string Function = $@"private bool {FunctionName}()
+            string Function = $@"private async Task<bool> {FunctionName}()
             {{
-                this.{Columns[0].name} = {DALName}.add{objectName}({writeParametersToSend(false, 0)});
+                this.{Columns[0].name} = await {DALName}.add{objectName}({writeParametersToSend(false, 0)});
                 return this.{Columns[0].name} > 0;
             }}";
-
             return Function;
         }
 
@@ -207,7 +245,7 @@ namespace CodeGenarator
         {
             string FunctionName = $@"_update{objectName}";
 
-            string Function = $@"private bool {FunctionName}()
+            string Function = $@"private Task<bool> {FunctionName}()
             {{
                 return {DALName}.update{objectName}({writeParametersToSend(false)});
             }}";
@@ -224,9 +262,9 @@ namespace CodeGenarator
             else secondFuncName = $@"is{objectName}ExistBy{C.name}";
 
             string Function = $@"
-        public static bool {FunctionName}({C.type} {C.name})
+        public static async Task<bool> {FunctionName}({C.type} {C.name})
         {{
-            if({secondFuncName}({C.name}))
+            if(await {secondFuncName}({C.name}))
             {{
                 return {DALName}.delete{objectName}({C.name});
             }}
@@ -240,9 +278,22 @@ namespace CodeGenarator
         {
             string FunctionName = "getAll";
             string Function = $@"
-            public static DataTable {FunctionName}()
+            public static Task<DataTable> {FunctionName}()
             {{
                 return {DALName}.{FunctionName}();
+            }}
+
+";
+            return Function;
+        }
+
+        public static string PagingFunc()
+        {
+            string FunctionName = "Paging";
+            string Function = $@"
+            public static Task<DataTable> {FunctionName}(int RowsPerPage, int PageNumber)
+            {{
+                return {DALName}.{FunctionName}(RowsPerPage, PageNumber);
             }}
 
 ";
@@ -257,9 +308,9 @@ namespace CodeGenarator
             else secondFuncName = $@"is{objectName}ExistBy{C.name}";
 
             string Function = $@"
-            public static DataTable {FunctionName}({C.type} {C.name})
+            public static async Task<DataTable> {FunctionName}({C.type} {C.name})
             {{
-                if({secondFuncName}({C.name}))
+                if(await {secondFuncName}({C.name}))
                 {{
                     return {DALName}.{FunctionName}({C.name});
                 }}
@@ -273,13 +324,13 @@ namespace CodeGenarator
         {
             string FunctionName = "Save";
             string Function = $@"
-            public bool {FunctionName}()
+            public async Task<bool> {FunctionName}()
             {{
                 switch (Mode)
                     {{
                         case enMode.AddNew:
 
-                            if (_add{objectName}())
+                            if (await _add{objectName}())
                             {{
 
                                 Mode = enMode.Update;
@@ -290,7 +341,7 @@ namespace CodeGenarator
                                 return false;
                             }}
 
-                        case enMode.Update: return _update{objectName}();
+                        case enMode.Update: return await _update{objectName}();
                     }}
                 return true;        
             }}";
@@ -302,6 +353,7 @@ namespace CodeGenarator
             string classStructure = $@"using DAL;
 using System;
 using System.Data;
+using System.Threading.Tasks;
 namespace BLL
 {{
     public class cls{objectName}

@@ -162,6 +162,22 @@ namespace CodeGenarator
             return SP;
         }
 
+
+        public static string PagingSP()
+        {
+            string SP = $@"
+            CREATE PROCEDURE [dbo].[SP_{clsHelper.tableName}_Paging]
+                    @RowsPerPage INT, @PageNumber INT
+            AS
+            BEGIN
+                SELECT * FROM {clsHelper.tableName} ORDER BY {clsHelper.Columns[0].name}
+                OFFSET (@PageNumber -1) * @RowsPerPage ROWS
+                FETCH NEXT @RowsPerPage ROWS ONLY;
+            END
+            ";
+            return SP;
+        }
+
         public static string isExistByColumnSP(clsHelper.Column col)
         {
             string SP = $@"

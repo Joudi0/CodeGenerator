@@ -12,36 +12,6 @@ namespace CodeGenarator
     {
         // Helpers
 
-        public static string updateParametersValue(int index)
-        {
-            List<Column> newColumns = new List<Column>(getColumnsForCsharp(Columns));
-            newColumns.RemoveAt(index);
-            string parameters = "";
-            foreach (Column col in newColumns)
-            {
-                string tabs = "\t\t\t    ";
-                if (col.isNullable == "NO")
-                {
-                    parameters += tabs + $@"{col.name} = ({col.type})reader[""{col.name}""];" + "\n";
-                }
-                else if (col.isNullable == "YES")
-                {
-                    parameters += tabs;
-                    switch (col.type)
-                    {
-                        case "byte": parameters += $@"{col.name} = (reader[""{col.name}""] == DBNull.Value) ? 0 : ({col.type})reader[""{col.name}""];" + "\n"; break;
-                        case "decimal":
-                        case "int": parameters += $@"{col.name} = (reader[""{col.name}""] == DBNull.Value) ? -1 : ({col.type})reader[""{col.name}""];" + "\n"; break;
-                        case "string": parameters += $@"{col.name} = (reader[""{col.name}""] == DBNull.Value) ? """" : ({col.type})reader[""{col.name}""];" + "\n"; break;
-                        case "DateTime": parameters += $@"{col.name} = (reader[""{col.name}""] == DBNull.Value) ? DateTime.Now : ({col.type})reader[""{col.name}""];" + "\n"; break;
-                        case "bool": parameters += $@"{col.name} = (reader[""{col.name}""] == DBNull.Value) ? false : ({col.type})reader[""{col.name}""];" + "\n"; break;
-                        default: break;
-                    }
-                }
-            }
-            return parameters;
-        }
-
         public static string addWithValueAllScript(bool withoutFirst = true)
         {
             List<Column> newColumns = new List<Column>(getColumnsForCsharp(Columns));
@@ -73,36 +43,30 @@ namespace CodeGenarator
 
         public static string getRecordByColumnFunc(Column C)
         {
-            int columnIndex = getColumnIndex(C.name);
+            if (Columns.Count == 0) return "Error in the lists";
             string FunctionName = "";
-            if (columnIndex == 0)
+            if (getColumnIndex(C.name) == 0)
             {
                 FunctionName = $@"get{objectName}ByID";
             }
             else FunctionName = $@"get{objectName}By{C.name}";
-            if (Columns.Count == 0) return "Error in the lists";
             string Function =
-                $@"public static bool {FunctionName}({writeParameters(columnIndex)})
+                $@"public static async Task<DataTable> {FunctionName}({C.type} {C.name})
                 {{
-                    bool isFound = false;
+                    DataTable dt = new DataTable();
                     using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
                     using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectBy{C.name}"", connection);
                     command.CommandType = CommandType.StoredProcedure;
                     command.Parameters.AddWithValue(""@{C.name}"", {C.name});
                     try
                     {{
-                        connection.Open();
-                        using SqlDataReader reader = command.ExecuteReader();
-
-                        if (reader.Read())
-                        {{
-                            isFound = true;
-{updateParametersValue(columnIndex)}
-                        }}
+                        await connection.OpenAsync();
+                        using SqlDataReader reader = await command.ExecuteReaderAsync();
+                        if (reader.HasRows) dt.Load(reader);
                     }}
                      catch (Exception) {{ throw;}}
 
-                    return isFound;
+                    return dt;
                 }}";
 
             return Function;
@@ -112,7 +76,7 @@ namespace CodeGenarator
         {
             if (Columns.Count == 0) return "Error in the lists, The Column List is Empty";
             string Function =
-                $@"public static bool update{objectName}({writeParameters(byRef: false)})
+                $@"public static async Task<bool> update{objectName}({writeParameters()})
                 {{
                     int rowsAffected = 0;
                     using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
@@ -121,8 +85,8 @@ namespace CodeGenarator
                     {addWithValueAllScript(false)}
                     try
                     {{
-                        connection.Open();
-                        rowsAffected = command.ExecuteNonQuery();
+                        await connection.OpenAsync();
+                        rowsAffected = await command.ExecuteNonQueryAsync();
                     }}
                     catch (Exception) {{ throw; }}
                     return (rowsAffected > 0);
@@ -134,7 +98,7 @@ namespace CodeGenarator
         {
             if (Columns.Count == 0) return "Error in the lists";
             string Function =
-                $@"public static int add{objectName}({writeParameters(0, false, false)})
+                $@"public static async Task<int> add{objectName}({writeParameters(0, false)})
                 {{
                     int {objectName}ID = -1;
                     using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
@@ -143,8 +107,8 @@ namespace CodeGenarator
                     {addWithValueAllScript()}
                     try
                     {{
-                        connection.Open();
-                        object result = command.ExecuteScalar();
+                        await connection.OpenAsync();
+                        object result = await command.ExecuteScalarAsync();
                         if (result != null && int.TryParse(result.ToString(), out int insertedID))
                         {{
                             {objectName}ID = insertedID;
@@ -161,7 +125,7 @@ namespace CodeGenarator
         {
             if (Columns.Count == 0) return "Error in the lists";
 
-            string Function = $@"public static bool delete{objectName}({C.type} {C.name})
+            string Function = $@"public static async Task<bool> delete{objectName}({C.type} {C.name})
             {{
                 int rowsAffected = 0;
                 using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
@@ -170,8 +134,8 @@ namespace CodeGenarator
                 command.Parameters.AddWithValue(""@{C.name}"", {C.name});
                 try
                 {{
-                    connection.Open();
-                    rowsAffected = command.ExecuteNonQuery();
+                    await connection.OpenAsync();
+                    rowsAffected = await command.ExecuteNonQueryAsync();
                 }}
                 catch (Exception) {{ throw; }}
                 return (rowsAffected > 0);
@@ -182,7 +146,7 @@ namespace CodeGenarator
         public static string getAllFunc()
         {
             string Function = $@"
-                    public static DataTable getAll()
+                    public static async Task<DataTable> getAll()
                     {{
                         DataTable dt = new DataTable();
                         using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
@@ -191,8 +155,8 @@ namespace CodeGenarator
 
                         try
                         {{
-                            connection.Open();
-                            using SqlDataReader reader = command.ExecuteReader();
+                            await connection.OpenAsync();
+                            using SqlDataReader reader = await command.ExecuteReaderAsync();
                             if (reader.HasRows) dt.Load(reader);
                         }}
                         catch (Exception) {{ throw; }}
@@ -213,7 +177,7 @@ namespace CodeGenarator
             if (Columns.Count == 0) return "Error in the lists";
 
             string Function = $@"
-                    public static DataTable {FunctionName}({C.type} {C.name})
+                    public static async Task<DataTable> {FunctionName}({C.type} {C.name})
                     {{
                         DataTable dt = new DataTable();
                         using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
@@ -223,8 +187,8 @@ namespace CodeGenarator
 
                         try
                         {{
-                            connection.Open();
-                            using SqlDataReader reader = command.ExecuteReader();
+                            await connection.OpenAsync();
+                            using SqlDataReader reader = await command.ExecuteReaderAsync();
                             if (reader.HasRows) dt.Load(reader);
                         }}
                         catch (Exception) {{ throw; }}
@@ -243,7 +207,7 @@ namespace CodeGenarator
             }
             else FunctionName = $@"is{objectName}ExistBy{C.name}";
             string Function = $@"
-            public static bool {FunctionName}({C.type} {C.name})
+            public static async Task<bool> {FunctionName}({C.type} {C.name})
             {{
                 bool isFound = false;
                 using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
@@ -253,8 +217,8 @@ namespace CodeGenarator
 
                 try
                 {{
-                    connection.Open();
-                    object result = command.ExecuteScalar();
+                    await connection.OpenAsync();
+                    object result = await command.ExecuteScalarAsync();
                     if (result != null && int.TryParse(result.ToString(), out int res))
                     {{
                         isFound = (res == 1);
@@ -267,13 +231,41 @@ namespace CodeGenarator
             return Function;
         }
 
+        public static string PagingFunc()
+        {
+            
+            if (Columns.Count == 0) return "Error in the lists";
+
+            string Function = $@"
+                    public static async Task<DataTable> PagingDAL(int RowsPerPage, int PageNumber)
+                    {{
+                        DataTable dt = new DataTable();
+                        using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+                        using SqlCommand command = new SqlCommand(""SP_{tableName}_Paging"", connection);
+                        command.CommandType = CommandType.StoredProcedure;
+                        command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);
+                        command.Parameters.AddWithValue(""@PageNumber"", PageNumber);
+
+                        try
+                        {{
+                            await connection.OpenAsync();
+                            using SqlDataReader reader = await command.ExecuteReaderAsync();
+                            if (reader.HasRows) dt.Load(reader);
+                        }}
+                        catch (Exception) {{ throw; }}
+
+                        return dt;
+                    }}";
+            return Function;
+        }
+
         public static string classStructure(StringBuilder injectedString)
         {
             string structure = $@"using Microsoft.Data.SqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data;
-
+using System.Threading.Tasks;
 namespace DAL
 {{
     public class cls{objectName}DAL

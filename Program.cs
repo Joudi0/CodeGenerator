@@ -4,14 +4,14 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
 using System.Text;
-using static CodeGenarator.clsHelper;
+using System.Threading.Tasks;
 
 namespace CodeGenarator
 {
     internal class Program
     {
 
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             AnsiConsole.Write(
                                     new FigletText("ADO Gen Code")
@@ -25,7 +25,7 @@ namespace CodeGenarator
             bool more = false;
             do
             {
-                Run();
+                await Run();
                 Console.Write("\nDo you want to generate code for another table? (yes/no): ");
                 string answer = Console.ReadLine();
                 if (answer.ToLower() == "yes" || answer.ToLower() == "y")
@@ -65,7 +65,7 @@ namespace CodeGenarator
             Console.ReadKey();
         }
 
-        public static void Run()
+        public static async Task Run()
         {
 
 
@@ -131,7 +131,7 @@ namespace CodeGenarator
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
-                Column C = clsHelper.mappedColumns[0];
+                clsHelper.Column C = clsHelper.mappedColumns[0];
                 DALFuncs.Append(clsDAL.deleteFunc(C));
                 BLLFuncs.Append(clsBLL.deleteFunc(C));
                 SPs.Append(clsSPs.deleteSP());
@@ -167,6 +167,15 @@ namespace CodeGenarator
                 }
             }
 
+            // Paging
+            Console.Write("Paging? yes/no: ");
+            answer = Console.ReadLine();
+            if (answer.ToLower() == "yes" || answer.ToLower() == "y")
+            {
+                    DALFuncs.Append(clsDAL.PagingFunc());
+                    BLLFuncs.Append(clsBLL.PagingFunc());
+                    SPs.Append(clsSPs.PagingSP());
+            }
             // getAll:
 
 
@@ -209,12 +218,10 @@ namespace CodeGenarator
             Console.WriteLine("\nBLL:");
             Console.WriteLine("\n\n\n" + clsBLL.classStructure(BLLFuncs) + "\n\n\n");
 
-            saveFiles(DALFuncs, BLLFuncs, SPs);
-
+            await saveFilesAsync(DALFuncs, BLLFuncs, SPs);
 
         }
-
-        public static void saveFiles(StringBuilder DALFuncs, StringBuilder BLLFuncs, StringBuilder SPs)
+        public static async Task saveFilesAsync(StringBuilder DALFuncs, StringBuilder BLLFuncs, StringBuilder SPs)
         {
             try
             {
@@ -229,9 +236,29 @@ namespace CodeGenarator
                 string bllPath = Path.Combine(projectDirectory, $"{clsHelper.className}.cs");
 
                 // Save files
-                File.WriteAllText(spPath, SPs.ToString());
-                File.WriteAllText(dalPath, clsDAL.classStructure(DALFuncs));
-                File.WriteAllText(bllPath, clsBLL.classStructure(BLLFuncs));
+                Console.Write("→ Making Stored Procedures... ");
+                await Task.Delay(1000);
+                using (StreamWriter writer = new StreamWriter(spPath))
+                {
+                    await writer.WriteAsync(SPs.ToString());
+                }
+                Console.WriteLine("[✔ Done]");
+
+                Console.Write("→ Making DAL Classes... ");
+                await Task.Delay(1000);
+                using (StreamWriter writer = new StreamWriter(dalPath))
+                {
+                    await writer.WriteAsync(clsDAL.classStructure(DALFuncs));
+                }
+                Console.WriteLine("[✔ Done]");
+
+                Console.Write("→ Making BLL Classes... ");
+                await Task.Delay(1000);
+                using (StreamWriter writer = new StreamWriter(bllPath))
+                {
+                    await writer.WriteAsync(clsBLL.classStructure(BLLFuncs));
+                }
+                Console.WriteLine("[✔ Done]");
 
                 AnsiConsole.MarkupLine($"\n[green]✔ Success:[/] Files generated and saved successfully!");
                 AnsiConsole.MarkupLine($"[grey]Stored Procedures:[/] [cyan]{spPath}[/]");
@@ -242,7 +269,6 @@ namespace CodeGenarator
             {
                 AnsiConsole.MarkupLine($"\n[red]❌ Error while saving files:[/] {ex.Message}");
             }
-
         }
     }
 }

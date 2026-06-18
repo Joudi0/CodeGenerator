@@ -216,33 +216,16 @@ namespace CodeGenarator
             return -1;
         }
 
-        public static string writeParameters(int columnIndex = 0, bool byRef = true, bool withFirstColumn = true)
+        public static string writeParameters(int columnIndex = 0, bool withFirstColumn = true)
         {
             string parameters = "";
             List<Column> newColumns = new List<Column>(getColumnsForCsharp(Columns));
             if (!withFirstColumn) newColumns.RemoveAt(0);
             if (newColumns.Count == 0) return "";
-
-            if (byRef)
+            foreach (Column col in newColumns)
             {
-                for (int i = 0; i < newColumns.Count; ++i)
-                {
-                    if (i == columnIndex)
-                    {
-                        parameters += $@"{newColumns[i].type} {newColumns[columnIndex].name}, ";
-
-                    }
-                    else parameters += $"ref {newColumns[i].type} {newColumns[i].name}, ";
-                }
+                parameters += $"{col.type} {col.name}, ";
             }
-            else
-            {
-                foreach (Column col in newColumns)
-                {
-                    parameters += $"{col.type} {col.name}, ";
-                }
-            }
-
             string result = "";
             if (parameters.Length > 2)
             {
