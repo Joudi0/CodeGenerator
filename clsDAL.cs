@@ -14,7 +14,7 @@ namespace CodeGenarator
 
         public static string addWithValueAllScript(bool withoutFirst = true)
         {
-            List<Column> newColumns = new List<Column>(getColumnsForCsharp(Columns));
+            List<Column> newColumns = new List<Column>(getColumnsForCsharp());
             if (withoutFirst) newColumns.RemoveAt(0);
             string script = "";
             string tabs = "\n\t\t    ";

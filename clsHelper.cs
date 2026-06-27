@@ -133,10 +133,10 @@ namespace CodeGenarator
             return newList;
         }
 
-        public static List<Column> getColumnsForCsharp(List<Column> ogList)
+        public static List<Column> getColumnsForCsharp()
         {
             List<Column> newList = new List<Column>();
-            foreach (Column col in ogList)
+            foreach (Column col in Columns)
             {
                 Column c = new Column();
                 c.name = col.name;
@@ -157,7 +157,7 @@ namespace CodeGenarator
 
         public static string writeParameters(int columnIndex = 0, bool withFirstColumn = true)
         {
-            List<Column> newColumns = new List<Column>(getColumnsForCsharp(Columns));
+            List<Column> newColumns = new List<Column>(getColumnsForCsharp());
             if (!withFirstColumn) newColumns.RemoveAt(0);
             if (newColumns.Count == 0) return "";
             return string.Join(", ", newColumns.Select(c => c.type + " " + c.name));
@@ -166,7 +166,7 @@ namespace CodeGenarator
         public static string writeParametersToSend(bool byRef = false, int withoutRefIndex = -1)
         {
             string parameters = "";
-            List<Column> raw = getColumnsForCsharp(Columns);         // Else
+            List<Column> raw = getColumnsForCsharp(); // Else
             if (byRef)
             {
                 for (int i = 0; i < raw.Count; ++i)
@@ -214,16 +214,27 @@ namespace CodeGenarator
             RunDotNetCommand(targetDirectory, $"new sln -n {solutionName}");
             RunDotNetCommand(targetDirectory, "new classlib -n DAL -f net8.0");
             RunDotNetCommand(targetDirectory, "new classlib -n BLL -f net8.0");
+            RunDotNetCommand(targetDirectory, "new classlib -n Shared -f net8.0");
             RunDotNetCommand(targetDirectory, "new webapi -n WebAPI -f net8.0"); // PL
-            RunDotNetCommand(targetDirectory, $"sln {solutionName}.sln add DAL/DAL.csproj BLL/BLL.csproj WebAPI/WebAPI.csproj");
+
+            RunDotNetCommand(targetDirectory, $"sln {solutionName}.sln add Shared/Shared.csproj DAL/DAL.csproj BLL/BLL.csproj WebAPI/WebAPI.csproj");
+            string dalFolder = Path.Combine(targetDirectory, "DAL");
             string bllFolder = Path.Combine(targetDirectory, "BLL");
             string webApiFolder = Path.Combine(targetDirectory, "WebAPI");
+
             RunDotNetCommand(bllFolder, "add reference ../DAL/DAL.csproj");
             RunDotNetCommand(webApiFolder, "add reference ../BLL/BLL.csproj");
             string dalClass1 = Path.Combine(targetDirectory, "DAL", "Class1.cs");
             string bllClass1 = Path.Combine(targetDirectory, "BLL", "Class1.cs");
+            string sharedClass1 = Path.Combine(targetDirectory, "Shared", "Class1.cs");
+
+            RunDotNetCommand(dalFolder, "add reference ../Shared/Shared.csproj");
+            RunDotNetCommand(bllFolder, "add reference ../Shared/Shared.csproj");
+            RunDotNetCommand(webApiFolder, "add reference ../Shared/Shared.csproj");
+
             if (File.Exists(dalClass1)) File.Delete(dalClass1);
             if (File.Exists(bllClass1)) File.Delete(bllClass1);
+            if (File.Exists(sharedClass1)) File.Delete(sharedClass1);
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)

@@ -226,6 +226,7 @@ namespace CodeGenarator
                 }
                 string DAL = _projectDirectory + "\\DAL";
                 string BLL = _projectDirectory + "\\BLL";
+                string DTO = _projectDirectory + "\\Shared\\DTOs";
                 if (!Directory.Exists(DAL))
                 {
                     Directory.CreateDirectory(DAL);
@@ -234,10 +235,15 @@ namespace CodeGenarator
                 {
                     Directory.CreateDirectory(BLL);
                 }
+                if (!Directory.Exists(DTO))
+                {
+                    Directory.CreateDirectory(DTO);
+                }
                 // file paths
                 string spPath = Path.Combine(_projectDirectory, $"{clsHelper.tableName}_SPs.sql");
                 string dalPath = Path.Combine(DAL, $"{clsHelper.className}DAL.cs");
                 string bllPath = Path.Combine(BLL, $"{clsHelper.className}.cs");
+                string DTOPath = Path.Combine(DTO, $"{clsHelper.className}DTO.cs");
 
                 // Save files
                 Console.Write("-> Making Stored Procedures... ");
@@ -248,7 +254,7 @@ namespace CodeGenarator
                 }
                 Console.WriteLine("[Done]");
 
-                Console.Write("-> Making DAL Classes... ");
+                Console.Write("-> Making DAL Class... ");
                 await Task.Delay(1000);
                 using (StreamWriter writer = new StreamWriter(dalPath))
                 {
@@ -256,7 +262,7 @@ namespace CodeGenarator
                 }
                 Console.WriteLine("[Done]");
 
-                Console.Write("-> Making BLL Classes... ");
+                Console.Write("-> Making BLL Class... ");
                 await Task.Delay(1000);
                 using (StreamWriter writer = new StreamWriter(bllPath))
                 {
@@ -264,10 +270,19 @@ namespace CodeGenarator
                 }
                 Console.WriteLine("[Done]");
 
+                Console.Write("-> Making DTO Class... ");
+                await Task.Delay(1000);
+                using (StreamWriter writer = new StreamWriter(DTOPath))
+                {
+                    await writer.WriteAsync(clsAPIs.DTOs());
+                }
+                Console.WriteLine("[Done]");
+
                 AnsiConsole.MarkupLine($"\n[green]Success:[/] Files generated and saved successfully!");
                 AnsiConsole.MarkupLine($"[grey]Stored Procedures:[/] [cyan]{spPath}[/]");
                 AnsiConsole.MarkupLine($"[grey]DAL Class:[/] [cyan]{dalPath}[/]");
                 AnsiConsole.MarkupLine($"[grey]BLL Class:[/] [cyan]{bllPath}[/]");
+                AnsiConsole.MarkupLine($"[grey]DTO Class:[/] [cyan]{DTOPath}[/]");
             }
             catch (Exception ex)
             {

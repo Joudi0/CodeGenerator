@@ -122,7 +122,7 @@ namespace CodeGenarator
         {
             string script = tabs + "DataRow row = dt.Rows[0];\n";
 
-            foreach (clsHelper.Column col in clsHelper.getColumnsForCsharp(clsHelper.Columns))
+            foreach (clsHelper.Column col in clsHelper.getColumnsForCsharp())
             {
                 if (col.isNullable == "NO")
                 {
