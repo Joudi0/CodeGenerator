@@ -109,7 +109,7 @@ namespace CodeGenarator
                     Columns.Add(columnName);
 
                 }
-                Console.Write("Do you want to add another 'Get By' method? yes/no: ");
+                Console.Write("Do you want to add another 'Get By' method? (yes/no): ");
                 answer = Console.ReadLine();
 
             } while (answer.ToLower() == "yes" || answer.ToLower() == "y");
@@ -135,7 +135,7 @@ namespace CodeGenarator
                     Columns.Add(columnName);
 
                 }
-                Console.WriteLine("Do you want to add another 'isExist By' method? yes/no");
+                Console.Write("Do you want to add another 'isExist By' method? (yes/no): ");
                 answer = Console.ReadLine();
 
             } while (answer.ToLower() == "yes" || answer.ToLower() == "y");
@@ -161,7 +161,7 @@ namespace CodeGenarator
                     Columns.Add(columnName);
 
                 }
-                Console.WriteLine("Do you want to add another 'getAll By' method? yes/no: ");
+                Console.Write("Do you want to add another 'getAll By' method? (yes/no): ");
                 answer = Console.ReadLine();
 
             } while (answer.ToLower() == "yes" || answer.ToLower() == "y");

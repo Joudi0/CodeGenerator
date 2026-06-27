@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data.SqlClient;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
@@ -16,31 +18,15 @@ namespace CodeGenarator
 
         public static List<Column> Columns;
         public static List<Column> mappedColumns;
+
         public static Column makeMappedColumnByName(string name)
         {
-            int index = clsHelper.getColumnIndex(name);
-            if(index == -1)
-            {
-                Console.WriteLine($"Column with name '{name}' not found.");
-                return new Column();
-            }
-            else
-            {
-                return mappedColumns[clsHelper.getColumnIndex(name)];
-            }
+            return mappedColumns.Find(n => n.name == name);
         }
+
         public static Column makeColumnByName(string name)
         {
-            int index = clsHelper.getColumnIndex(name);
-            if (index == -1)
-            {
-                Console.WriteLine($"Column with name '{name}' not found.");
-                return new Column();
-            }
-            else
-            {
-                return Columns[clsHelper.getColumnIndex(name)];
-            }
+            return Columns.Find(n => n.name == name);
         }
 
         public static List<Column> getColumnsNameAndType()
@@ -71,6 +57,49 @@ namespace CodeGenarator
             return columnsList;
         }
 
+        public static string mapFromSQLToCsharp(string sql)
+        {
+            switch (sql)
+            {
+                case "varchar":
+                case "nvarchar":
+                case "char":
+                case "nchar":
+                case "text":
+                case "ntext": return "string";
+
+                case "bigint": return "long";
+                case "int": return "int";
+                case "smallint": return "short";
+                case "tinyint": return "byte";
+
+                case "bit": return "bool";
+
+                case "decimal":
+                case "numeric":
+                case "money":
+                case "smallmoney": return "decimal";
+                case "float": return "double";
+                case "real": return "float";
+
+                case "date":
+                case "datetime":
+                case "smalldatetime":
+                case "datetime2":
+                    return "DateTime";
+                case "time": return "TimeSpan";
+
+                case "uniqueidentifier": return "Guid";
+
+                case "binary":
+                case "varbinary":
+                case "image":
+                    return "byte[]";
+                default: return "object";
+            }
+
+        }
+
         public static List<Column> mappingTheColumns(List<Column> ogList)
         {
             List<Column> newList = new List<Column>();
@@ -83,51 +112,11 @@ namespace CodeGenarator
 
                 string sqlType = col.type.ToLower();
 
-                switch (sqlType)
-                {
-                    case "varchar":
-                    case "nvarchar":
-                    case "char":
-                    case "nchar":
-                    case "text":
-                    case "ntext": c.type = "string"; break;
-
-                    case "bigint": c.type = "long"; break;
-                    case "int": c.type = "int"; break;
-                    case "smallint": c.type = "short"; break;
-                    case "tinyint": c.type = "byte"; break;
-
-                    case "bit": c.type = "bool"; break;
-
-                    case "decimal":
-                    case "numeric":
-                    case "money":
-                    case "smallmoney": c.type = "decimal"; break;
-                    case "float": c.type = "double"; break;
-                    case "real": c.type = "float"; break;
-
-                    case "date":
-                    case "datetime":
-                    case "smalldatetime":
-                    case "datetime2":
-                        c.type = "DateTime";
-                        break;
-                    case "time": c.type = "TimeSpan"; break;
-
-                    case "uniqueidentifier": c.type = "Guid"; break;
-
-                    case "binary":
-                    case "varbinary":
-                    case "image":
-                        c.type = "byte[]";
-                        break;
-
-                    default: c.type = "object"; break;
-                }
+                c.type = mapFromSQLToCsharp(sqlType);
 
                 if (c.name.ToLower().EndsWith("id") && clsHelper.getColumnIndex(c.name) > 0)
                 {
-                    Console.WriteLine($"Composition for {c.name} foreign key? (yes/no): ");
+                    Console.Write($"Composition for {c.name} foreign key? (yes/no): ");
                     string answer = Console.ReadLine();
                     if (answer != null && (answer.ToLower() == "yes" || answer.ToLower() == "y"))
                     {
@@ -155,49 +144,7 @@ namespace CodeGenarator
                 c.composition = false;
 
                 string sqlType = col.type.ToLower();
-
-                switch (sqlType)
-                {
-                    case "varchar":
-                    case "nvarchar":
-                    case "char":
-                    case "nchar":
-                    case "text":
-                    case "ntext": c.type = "string"; break;
-
-                    case "bigint": c.type = "long"; break;
-                    case "int": c.type = "int"; break;
-                    case "smallint": c.type = "short"; break;
-                    case "tinyint": c.type = "byte"; break;
-
-                    case "bit": c.type = "bool"; break;
-
-                    case "decimal":
-                    case "numeric":
-                    case "money":
-                    case "smallmoney": c.type = "decimal"; break;
-                    case "float": c.type = "double"; break;
-                    case "real": c.type = "float"; break;
-
-                    case "date":
-                    case "datetime":
-                    case "smalldatetime":
-                    case "datetime2":
-                        c.type = "DateTime";
-                        break;
-                    case "time": c.type = "TimeSpan"; break;
-
-                    case "uniqueidentifier": c.type = "Guid"; break;
-
-                    case "binary":
-                    case "varbinary":
-                    case "image":
-                        c.type = "byte[]";
-                        break;
-
-                    default: c.type = "object"; break;
-                }
-
+                c.type = mapFromSQLToCsharp(sqlType);
                 newList.Add(c);
             }
             return newList;
@@ -205,40 +152,21 @@ namespace CodeGenarator
 
         public static int getColumnIndex(string columnName)
         {
-            for (int i = 0; i < Columns.Count; i++)
-            {
-                Column column = Columns[i];
-                if (column.name == columnName)
-                {
-                    return i;
-                }
-            }
-            return -1;
+            return Columns.FindIndex(c => c.name == columnName);
         }
 
         public static string writeParameters(int columnIndex = 0, bool withFirstColumn = true)
         {
-            string parameters = "";
             List<Column> newColumns = new List<Column>(getColumnsForCsharp(Columns));
             if (!withFirstColumn) newColumns.RemoveAt(0);
             if (newColumns.Count == 0) return "";
-            foreach (Column col in newColumns)
-            {
-                parameters += $"{col.type} {col.name}, ";
-            }
-            string result = "";
-            if (parameters.Length > 2)
-            {
-                result = parameters.Substring(0, parameters.Length - 2);
-            }
-            return result;
+            return string.Join(", ", newColumns.Select(c => c.type + " " + c.name));
         }
+
         public static string writeParametersToSend(bool byRef = false, int withoutRefIndex = -1)
         {
             string parameters = "";
-            List<Column> mapped = new List<Column>(mappedColumns); //  For Composition
-            List<Column> raw = new List<Column>(Columns);          // Else
-
+            List<Column> raw = getColumnsForCsharp(Columns);         // Else
             if (byRef)
             {
                 for (int i = 0; i < raw.Count; ++i)
@@ -249,13 +177,13 @@ namespace CodeGenarator
             }
             else
             {
-                for (int i = 0; i < mapped.Count; ++i)
+                for (int i = 0; i < mappedColumns.Count; ++i)
                 {
                     if (i == withoutRefIndex) continue;
 
-                    if (mapped[i].composition)
+                    if (mappedColumns[i].composition)
                     {
-                        string cleanName = mapped[i].name.Substring(0, mapped[i].name.Length - 2);
+                        string cleanName = mappedColumns[i].name.Substring(0, mappedColumns[i].name.Length - 2);
                         cleanName = char.ToUpper(cleanName[0]) + cleanName.Substring(1);
                         parameters += $"this.{cleanName}.{raw[i].name}, ";
                     }
@@ -273,48 +201,77 @@ namespace CodeGenarator
             }
             return result;
         }
+
         public static string getRawColumnNames()
         {
-            string parameters = "";
-            foreach (Column col in Columns)
-            {
-                parameters += $"{col.name}, ";
-            }
-            string result = "";
-            if (parameters.Length > 2)
-            {
-                result = parameters.Substring(0, parameters.Length - 2);
-            }
-            return result;
+            return string.Join(", ", Columns.Select(c => c.name));
         }
-        public static void debugThing(object obj)
+
+        public static void GenerateArchitectureSolution(string targetDirectory, string solutionName)
         {
-            Type type = obj.GetType();
-            if(type != null)
-            {
-                var Methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static).OrderBy(method => method.Name);
-                Console.WriteLine($"Type: {type.FullName}");
-                Console.WriteLine($"Type: {type.FullName}");
-
-                foreach (var prop in type.GetProperties())
-                {
-                    try
-                    {
-                        var value = prop.GetValue(obj);
-                        Console.WriteLine($"  {prop.Name} = {value}");
-                    }
-                    catch
-                    {
-                        Console.WriteLine($"  {prop.Name} = [Cannot Read]");
-                    }
-                }
-                foreach (var method in Methods)
-                {
-                    Console.WriteLine($"Method: {method.Name}");
-                }
-                object myClass = Activator.CreateInstance(type);
-            }
-
+            if (!Directory.Exists(targetDirectory))
+                Directory.CreateDirectory(targetDirectory);
+            RunDotNetCommand(targetDirectory, $"new sln -n {solutionName}");
+            RunDotNetCommand(targetDirectory, "new classlib -n DAL -f net8.0");
+            RunDotNetCommand(targetDirectory, "new classlib -n BLL -f net8.0");
+            RunDotNetCommand(targetDirectory, "new webapi -n WebAPI -f net8.0"); // PL
+            RunDotNetCommand(targetDirectory, $"sln {solutionName}.sln add DAL/DAL.csproj BLL/BLL.csproj WebAPI/WebAPI.csproj");
+            string bllFolder = Path.Combine(targetDirectory, "BLL");
+            string webApiFolder = Path.Combine(targetDirectory, "WebAPI");
+            RunDotNetCommand(bllFolder, "add reference ../DAL/DAL.csproj");
+            RunDotNetCommand(webApiFolder, "add reference ../BLL/BLL.csproj");
+            string dalClass1 = Path.Combine(targetDirectory, "DAL", "Class1.cs");
+            string bllClass1 = Path.Combine(targetDirectory, "BLL", "Class1.cs");
+            if (File.Exists(dalClass1)) File.Delete(dalClass1);
+            if (File.Exists(bllClass1)) File.Delete(bllClass1);
         }
-    }
+
+        private static void RunDotNetCommand(string workingDirectory, string arguments)
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = arguments,
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using (Process process = Process.Start(startInfo))
+            {
+                process.WaitForExit();
+            }
+        }
+
+        public static void debugThing(object obj)
+            {
+                Type type = obj.GetType();
+                if(type != null)
+                {
+                    var Methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static).OrderBy(method => method.Name);
+                    Console.WriteLine($"Type: {type.FullName}");
+                    Console.WriteLine($"Type: {type.FullName}");
+
+                    foreach (var prop in type.GetProperties())
+                    {
+                        try
+                        {
+                            var value = prop.GetValue(obj);
+                            Console.WriteLine($"  {prop.Name} = {value}");
+                        }
+                        catch
+                        {
+                            Console.WriteLine($"  {prop.Name} = [Cannot Read]");
+                        }
+                    }
+                    foreach (var method in Methods)
+                    {
+                        Console.WriteLine($"Method: {method.Name}");
+                    }
+                    object myClass = Activator.CreateInstance(type);
+                }
+
+            }
+        }
 }

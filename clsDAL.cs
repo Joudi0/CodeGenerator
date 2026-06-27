@@ -76,21 +76,21 @@ namespace CodeGenarator
         {
             if (Columns.Count == 0) return "Error in the lists, The Column List is Empty";
             string Function =
-                $@"public static async Task<bool> update{objectName}({writeParameters()})
-                {{
-                    int rowsAffected = 0;
-                    using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-                    using SqlCommand command = new SqlCommand(""SP_{tableName}_Update"", connection);
-                    command.CommandType = CommandType.StoredProcedure;
-                    {addWithValueAllScript(false)}
-                    try
-                    {{
-                        await connection.OpenAsync();
-                        rowsAffected = await command.ExecuteNonQueryAsync();
-                    }}
-                    catch (Exception) {{ throw; }}
-                    return (rowsAffected > 0);
-                }}";
+                $@"        public static async Task<bool> update{objectName}({writeParameters()})
+        {{
+            int rowsAffected = 0;
+            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlCommand command = new SqlCommand(""SP_{tableName}_Update"", connection);
+            command.CommandType = CommandType.StoredProcedure;
+            {addWithValueAllScript(false)}
+            try
+            {{
+                await connection.OpenAsync();
+                rowsAffected = await command.ExecuteNonQueryAsync();
+            }}
+            catch (Exception) {{ throw; }}
+            return (rowsAffected > 0);
+        }}";
             return Function;
         }
 
@@ -98,26 +98,26 @@ namespace CodeGenarator
         {
             if (Columns.Count == 0) return "Error in the lists";
             string Function =
-                $@"public static async Task<int> add{objectName}({writeParameters(0, false)})
+                $@"        public static async Task<int> add{objectName}({writeParameters(0, false)})
+        {{
+            int {objectName}ID = -1;
+            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlCommand command = new SqlCommand(""SP_{tableName}_Insert"", connection);
+            command.CommandType = CommandType.StoredProcedure;
+            {addWithValueAllScript()}
+            try
+            {{
+                await connection.OpenAsync();
+                object result = await command.ExecuteScalarAsync();
+                if (result != null && int.TryParse(result.ToString(), out int insertedID))
                 {{
-                    int {objectName}ID = -1;
-                    using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-                    using SqlCommand command = new SqlCommand(""SP_{tableName}_Insert"", connection);
-                    command.CommandType = CommandType.StoredProcedure;
-                    {addWithValueAllScript()}
-                    try
-                    {{
-                        await connection.OpenAsync();
-                        object result = await command.ExecuteScalarAsync();
-                        if (result != null && int.TryParse(result.ToString(), out int insertedID))
-                        {{
-                            {objectName}ID = insertedID;
-                        }}
-                    }}
-                    catch (Exception) {{ throw; }}
+                    {objectName}ID = insertedID;
+                }}
+            }}
+            catch (Exception) {{ throw; }}
 
-                    return {objectName}ID;
-                }}";
+            return {objectName}ID;
+        }}";
             return Function;
         }
 
@@ -125,44 +125,44 @@ namespace CodeGenarator
         {
             if (Columns.Count == 0) return "Error in the lists";
 
-            string Function = $@"public static async Task<bool> delete{objectName}({C.type} {C.name})
+            string Function = $@"        public static async Task<bool> delete{objectName}({C.type} {C.name})
+        {{
+            int rowsAffected = 0;
+            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlCommand command = new SqlCommand(""SP_{tableName}_Delete"", connection);
+            command.CommandType = CommandType.StoredProcedure;
+            command.Parameters.AddWithValue(""@{C.name}"", {C.name});
+            try
             {{
-                int rowsAffected = 0;
-                using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-                using SqlCommand command = new SqlCommand(""SP_{tableName}_Delete"", connection);
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.AddWithValue(""@{C.name}"", {C.name});
-                try
-                {{
-                    await connection.OpenAsync();
-                    rowsAffected = await command.ExecuteNonQueryAsync();
-                }}
-                catch (Exception) {{ throw; }}
-                return (rowsAffected > 0);
-            }}";
+                await connection.OpenAsync();
+                rowsAffected = await command.ExecuteNonQueryAsync();
+            }}
+            catch (Exception) {{ throw; }}
+            return (rowsAffected > 0);
+        }}";
             return Function;
         }
 
         public static string getAllFunc()
         {
             string Function = $@"
-                    public static async Task<DataTable> getAll()
-                    {{
-                        DataTable dt = new DataTable();
-                        using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-                        using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAll"", connection);
-                        command.CommandType = CommandType.StoredProcedure;
+        public static async Task<DataTable> getAll()
+        {{
+            DataTable dt = new DataTable();
+            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAll"", connection);
+            command.CommandType = CommandType.StoredProcedure;
 
-                        try
-                        {{
-                            await connection.OpenAsync();
-                            using SqlDataReader reader = await command.ExecuteReaderAsync();
-                            if (reader.HasRows) dt.Load(reader);
-                        }}
-                        catch (Exception) {{ throw; }}
+            try
+            {{
+                await connection.OpenAsync();
+                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                if (reader.HasRows) dt.Load(reader);
+            }}
+            catch (Exception) {{ throw; }}
 
-                        return dt;
-                    }}";
+            return dt;
+        }}";
             return Function;
         }
 
@@ -177,24 +177,24 @@ namespace CodeGenarator
             if (Columns.Count == 0) return "Error in the lists";
 
             string Function = $@"
-                    public static async Task<DataTable> {FunctionName}({C.type} {C.name})
-                    {{
-                        DataTable dt = new DataTable();
-                        using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-                        using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAllBy{C.name}"", connection);
-                        command.CommandType = CommandType.StoredProcedure;
-                        command.Parameters.AddWithValue(""@{C.name}"", {C.name});
+        public static async Task<DataTable> {FunctionName}({C.type} {C.name})
+        {{
+            DataTable dt = new DataTable();
+            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAllBy{C.name}"", connection);
+            command.CommandType = CommandType.StoredProcedure;
+            command.Parameters.AddWithValue(""@{C.name}"", {C.name});
 
-                        try
-                        {{
-                            await connection.OpenAsync();
-                            using SqlDataReader reader = await command.ExecuteReaderAsync();
-                            if (reader.HasRows) dt.Load(reader);
-                        }}
-                        catch (Exception) {{ throw; }}
+            try
+            {{
+                await connection.OpenAsync();
+                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                if (reader.HasRows) dt.Load(reader);
+            }}
+            catch (Exception) {{ throw; }}
 
-                        return dt;
-                    }}";
+            return dt;
+        }}";
             return Function;
         }
 
@@ -207,27 +207,27 @@ namespace CodeGenarator
             }
             else FunctionName = $@"is{objectName}ExistBy{C.name}";
             string Function = $@"
-            public static async Task<bool> {FunctionName}({C.type} {C.name})
+        public static async Task<bool> {FunctionName}({C.type} {C.name})
+        {{
+            bool isFound = false;
+            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlCommand command = new SqlCommand(""SP_{tableName}_IsExistBy{C.name}"", connection);
+            command.CommandType = CommandType.StoredProcedure;
+            command.Parameters.AddWithValue(""@{C.name}"", {C.name});
+
+            try
             {{
-                bool isFound = false;
-                using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-                using SqlCommand command = new SqlCommand(""SP_{tableName}_IsExistBy{C.name}"", connection);
-                command.CommandType = CommandType.StoredProcedure;
-                command.Parameters.AddWithValue(""@{C.name}"", {C.name});
-
-                try
+                await connection.OpenAsync();
+                object result = await command.ExecuteScalarAsync();
+                if (result != null && int.TryParse(result.ToString(), out int res))
                 {{
-                    await connection.OpenAsync();
-                    object result = await command.ExecuteScalarAsync();
-                    if (result != null && int.TryParse(result.ToString(), out int res))
-                    {{
-                        isFound = (res == 1);
-                    }}
+                    isFound = (res == 1);
                 }}
-                catch (Exception) {{ throw; }}
+            }}
+            catch (Exception) {{ throw; }}
 
-                return isFound;
-            }}";
+            return isFound;
+        }}";
             return Function;
         }
 
@@ -237,28 +237,28 @@ namespace CodeGenarator
             if (Columns.Count == 0) return "Error in the lists";
 
             string Function = $@"
-                    public static async Task<DataTable> PagingDAL(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
-                    {{
-                        DataTable dt = new DataTable();
-                        using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-                        using SqlCommand command = new SqlCommand(""SP_{tableName}_Paging"", connection);
-                        command.CommandType = CommandType.StoredProcedure;
-                        command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);
-                        command.Parameters.AddWithValue(""@PageNumber"", PageNumber);             
-                        command.Parameters.AddWithValue(""@SortColumn"", string.IsNullOrEmpty(SortColumn) ? (object)DBNull.Value : SortColumn);
-                        command.Parameters.AddWithValue(""@Direction"", string.IsNullOrEmpty(Direction) ? (object)DBNull.Value : Direction);    
+        public static async Task<DataTable> PagingDAL(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
+        {{
+            DataTable dt = new DataTable();
+            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlCommand command = new SqlCommand(""SP_{tableName}_Paging"", connection);
+            command.CommandType = CommandType.StoredProcedure;
+            command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);
+            command.Parameters.AddWithValue(""@PageNumber"", PageNumber);             
+            command.Parameters.AddWithValue(""@SortColumn"", string.IsNullOrEmpty(SortColumn) ? (object)DBNull.Value : SortColumn);
+            command.Parameters.AddWithValue(""@Direction"", string.IsNullOrEmpty(Direction) ? (object)DBNull.Value : Direction);    
 
 
-                        try
-                        {{
-                            await connection.OpenAsync();
-                            using SqlDataReader reader = await command.ExecuteReaderAsync();
-                            if (reader.HasRows) dt.Load(reader);
-                        }}
-                        catch (Exception) {{ throw; }}
+            try
+            {{
+                await connection.OpenAsync();
+                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                if (reader.HasRows) dt.Load(reader);
+            }}
+            catch (Exception) {{ throw; }}
 
-                        return dt;
-                    }}";
+            return dt;
+        }}";
             return Function;
         }
 

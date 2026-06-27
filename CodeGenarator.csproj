@@ -177,6 +177,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="clsAPIs.cs" />
     <Compile Include="clsBLL.cs" />
     <Compile Include="clsDAL.cs" />
     <Compile Include="clsHelper.cs" />

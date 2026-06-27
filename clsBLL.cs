@@ -4,17 +4,16 @@ using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static CodeGenarator.clsHelper;
 
 namespace CodeGenarator
 {
     public class clsBLL
     {
-        public static string DALName = $@"cls{objectName}DAL";
+        public static string DALName = $@"cls{clsHelper.objectName}DAL";
         public static string tabs = "\t\t";
         // Helpers Functions:
 
-        public static string giveInitialValue(Column c, bool newVar = false)
+        public static string giveInitialValue(clsHelper.Column c, bool newVar = false)
         {
             string line = "";
             if(newVar)
@@ -28,8 +27,6 @@ namespace CodeGenarator
                     case "string": line += $@"{c.type} {c.name} = """";"; break;
                     case "DateTime": line += $@"{c.type} {c.name} = DateTime.Now;"; break;
                     default: line += $@"this.{c.type.Substring(3)} = new {c.type}();"; break;
-
-
                 }
             }
             else
@@ -50,11 +47,11 @@ namespace CodeGenarator
             return line;
         }
 
-        public static string getByValuesHelper(Column col)
+        public static string getByValuesHelper(clsHelper.Column col)
         {
             string values = "";
-            List<Column> columns = new List<Column>(Columns);
-            int columnIndex = getColumnIndex(col.name);
+            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.Columns);
+            int columnIndex = clsHelper.getColumnIndex(col.name);
             values += $@"{col.type} ";
         
             return values;
@@ -63,14 +60,14 @@ namespace CodeGenarator
         public static string initalVars(int withoutColumnIndex = -1)
         {
             string values = "";
-            List<Column> cols = new List<Column>(mappedColumns);
+            List<clsHelper.Column> cols = new List<clsHelper.Column>(clsHelper.mappedColumns);
             if (withoutColumnIndex > -1)
             {
 
                 cols.RemoveAt(withoutColumnIndex);
 
             }
-            foreach (Column c in cols)
+            foreach (clsHelper.Column c in cols)
             {
                 
                 values += tabs + giveInitialValue(c, true);
@@ -82,7 +79,7 @@ namespace CodeGenarator
         public static string initialThisValues()
         {
             string values = "";
-            foreach (Column c in mappedColumns)
+            foreach (clsHelper.Column c in clsHelper.mappedColumns)
             {
                 values += tabs + giveInitialValue(c);
             }
@@ -93,7 +90,7 @@ namespace CodeGenarator
         public static string thisValues()
         {
             string values = "";
-            foreach (Column c in clsHelper.mappedColumns)
+            foreach (clsHelper.Column c in clsHelper.mappedColumns)
             {
                 if(c.composition)
                 {
@@ -125,7 +122,7 @@ namespace CodeGenarator
         {
             string script = tabs + "DataRow row = dt.Rows[0];\n";
 
-            foreach (Column col in getColumnsForCsharp(Columns))
+            foreach (clsHelper.Column col in clsHelper.getColumnsForCsharp(clsHelper.Columns))
             {
                 if (col.isNullable == "NO")
                 {
@@ -154,7 +151,7 @@ namespace CodeGenarator
         public static string writeProperties()
         {
             string Properties = "";
-            foreach (Column c in mappedColumns)
+            foreach (clsHelper.Column c in clsHelper.mappedColumns)
             {
                 if (c.composition)
                 {
@@ -176,13 +173,13 @@ namespace CodeGenarator
             string Constructors = "";
             if (isEmpty)
             {
-                Constructors = $@"public {className}()
+                Constructors = $@"      public {clsHelper.className}()
             {{
 {initialThisValues()}";
             }
             else
             {
-                Constructors = $@"private {className}({writeParameters(0, true)})
+                Constructors = $@"private {clsHelper.className}({clsHelper.writeParameters(0, true)})
                 {{
 {thisValues()}
                 }}";
@@ -190,83 +187,83 @@ namespace CodeGenarator
             return Constructors;
         }
 
-        public static string isExistsFunc(Column C)
+        public static string isExistsFunc(clsHelper.Column C)
         {
             string FunctionName = "";
-            if (getColumnIndex(C.name) == 0)
+            if (clsHelper.getColumnIndex(C.name) == 0)
             {
-                FunctionName = $@"is{objectName}ExistByID";
+                FunctionName = $@"is{clsHelper.objectName}ExistByID";
             }
-            else FunctionName = $@"is{objectName}ExistBy{C.name}";
-            string Function = $@"public static Task<bool> {FunctionName}({C.type} {C.name})
-            {{
-                return {DALName}.{FunctionName}({C.name});
+            else FunctionName = $@"is{clsHelper.objectName}ExistBy{C.name}";
+            string Function = $@"       public static Task<bool> {FunctionName}({C.type} {C.name})
+        {{
+            return {DALName}.{FunctionName}({C.name});
                 
-            }}
+        }}
 ";
             return Function;
         }
 
-        public static string getByFunc(Column C)
+        public static string getByFunc(clsHelper.Column C)
         {
-            int columnIndex = getColumnIndex(C.name);
+            int columnIndex = clsHelper.getColumnIndex(C.name);
             string FunctionName = "";
             if (columnIndex == 0)
             {
-                FunctionName = $@"get{objectName}ByID";
+                FunctionName = $@"get{clsHelper.objectName}ByID";
             }
-            else FunctionName = $@"get{objectName}By{C.name}";
+            else FunctionName = $@"get{clsHelper.objectName}By{C.name}";
             string Function = $@"
-            public static async Task<cls{objectName}> {FunctionName}({C.type} {C.name})
-            {{
-                DataTable dt = await {DALName}.{FunctionName}({C.name});
-                if (dt == null || dt.Rows.Count != 1) return null;
-                {loadVarsFromRow()}
-                var obj = new cls{objectName}({getRawColumnNames()});
-                {asyncVariableValue()}
-                return obj;
-            }}
+        public static async Task<cls{clsHelper.objectName}> {FunctionName}({C.type} {C.name})
+        {{
+            DataTable dt = await {DALName}.{FunctionName}({C.name});
+            if (dt == null || dt.Rows.Count != 1) return null;
+            {loadVarsFromRow()}
+            var obj = new cls{clsHelper.objectName}({clsHelper.getRawColumnNames()});
+            {asyncVariableValue()}
+            return obj;
+        }}
 ";
             return Function;
         }
          
         public static string addFunc()
         {
-            string FunctionName = $@"_add{objectName}";
-            string Function = $@"private async Task<bool> {FunctionName}()
-            {{
-                this.{Columns[0].name} = await {DALName}.add{objectName}({writeParametersToSend(false, 0)});
-                return this.{Columns[0].name} > 0;
-            }}";
+            string FunctionName = $@"_add{clsHelper.objectName}";
+            string Function = $@"       private async Task<bool> {FunctionName}()
+        {{
+            this.{clsHelper.Columns[0].name} = await {DALName}.add{clsHelper.objectName}({clsHelper.writeParametersToSend(false, 0)});
+            return this.{clsHelper.Columns[0].name} > 0;
+        }}";
             return Function;
         }
 
         public static string updateFunc()
         {
-            string FunctionName = $@"_update{objectName}";
+            string FunctionName = $@"_update{clsHelper.objectName}";
 
-            string Function = $@"private Task<bool> {FunctionName}()
-            {{
-                return {DALName}.update{objectName}({writeParametersToSend(false)});
-            }}";
+            string Function = $@"       private Task<bool> {FunctionName}()
+        {{
+            return {DALName}.update{clsHelper.objectName}({clsHelper.writeParametersToSend(false)});
+        }}";
 
             return Function;
         }
         
-        public static string deleteFunc(Column C)
+        public static string deleteFunc(clsHelper.Column C)
         {
-            string FunctionName = $@"delete{objectName}";
+            string FunctionName = $@"delete{clsHelper.objectName}";
             string secondFuncName = "";
 
-            if (getColumnIndex(C.name) == 0) secondFuncName = $@"is{objectName}ExistByID";
-            else secondFuncName = $@"is{objectName}ExistBy{C.name}";
+            if (clsHelper.getColumnIndex(C.name) == 0) secondFuncName = $@"is{clsHelper.objectName}ExistByID";
+            else secondFuncName = $@"is{clsHelper.objectName}ExistBy{C.name}";
 
             string Function = $@"
         public static async Task<bool> {FunctionName}({C.type} {C.name})
         {{
             if(await {secondFuncName}({C.name}))
             {{
-                return {DALName}.delete{objectName}({C.name});
+                return {DALName}.delete{clsHelper.objectName}({C.name});
             }}
             else return false;
         }}
@@ -278,11 +275,10 @@ namespace CodeGenarator
         {
             string FunctionName = "getAll";
             string Function = $@"
-            public static Task<DataTable> {FunctionName}()
-            {{
-                return {DALName}.{FunctionName}();
-            }}
-
+        public static Task<DataTable> {FunctionName}()
+        {{
+            return {DALName}.{FunctionName}();
+        }}
 ";
             return Function;
         }
@@ -291,31 +287,30 @@ namespace CodeGenarator
         {
             string FunctionName = "Paging";
             string Function = $@"
-            public static Task<DataTable> {FunctionName}(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
-            {{
-                return {DALName}.{FunctionName}(RowsPerPage, PageNumber, SortColumn, Direction);
-            }}
-
+        public static Task<DataTable> {FunctionName}(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
+        {{
+            return {DALName}.{FunctionName}(RowsPerPage, PageNumber, SortColumn, Direction);
+        }}
 ";
             return Function;
         }
 
-        public static string getAllByFunc(Column C)
+        public static string getAllByFunc(clsHelper.Column C)
         {
             string FunctionName = "getAllBy" + C.name;
             string secondFuncName = "";
-            if (getColumnIndex(C.name) == 0) secondFuncName = $@"is{objectName}ExistByID";
-            else secondFuncName = $@"is{objectName}ExistBy{C.name}";
+            if (clsHelper.getColumnIndex(C.name) == 0) secondFuncName = $@"is{clsHelper.objectName}ExistByID";
+            else secondFuncName = $@"is{clsHelper.objectName}ExistBy{C.name}";
 
             string Function = $@"
-            public static async Task<DataTable> {FunctionName}({C.type} {C.name})
+        public static async Task<DataTable> {FunctionName}({C.type} {C.name})
+        {{
+            if(await {secondFuncName}({C.name}))
             {{
-                if(await {secondFuncName}({C.name}))
-                {{
-                    return {DALName}.{FunctionName}({C.name});
-                }}
-                return new DataTable();
+                return {DALName}.{FunctionName}({C.name});
             }}
+            return new DataTable();
+        }}
 ";
             return Function;
         }
@@ -324,27 +319,27 @@ namespace CodeGenarator
         {
             string FunctionName = "Save";
             string Function = $@"
-            public async Task<bool> {FunctionName}()
-            {{
-                switch (Mode)
-                    {{
-                        case enMode.AddNew:
+        public async Task<bool> {FunctionName}()
+        {{
+            switch (Mode)
+                {{
+                    case enMode.AddNew:
 
-                            if (await _add{objectName}())
-                            {{
+                        if (await _add{clsHelper.objectName}())
+                        {{
 
-                                Mode = enMode.Update;
-                                return true;
-                            }}
-                            else
-                            {{
-                                return false;
-                            }}
+                            Mode = enMode.Update;
+                            return true;
+                        }}
+                        else
+                        {{
+                            return false;
+                        }}
 
-                        case enMode.Update: return await _update{objectName}();
-                    }}
-                return true;        
-            }}";
+                    case enMode.Update: return await _update{clsHelper.objectName}();
+                }}
+            return true;        
+        }}";
             return Function;
         }
 
@@ -356,7 +351,7 @@ using System.Data;
 using System.Threading.Tasks;
 namespace BLL
 {{
-    public class cls{objectName}
+    public class cls{clsHelper.objectName}
     {{
 
     {injectedString}
