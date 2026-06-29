@@ -145,7 +145,7 @@ namespace CodeGenarator
 
         public static string getAllByFunc(clsHelper.Column C)
         {
-            string functionName = "getAllBy" + C.name;
+            string functionName = (clsHelper.getColumnIndex(C.name) == 0) ? $"getAllByID" : $"getAllBy{C.name}";
             string existFuncName = (clsHelper.getColumnIndex(C.name) == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
 
             return $@"

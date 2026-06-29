@@ -106,6 +106,7 @@ namespace CodeGenarator
 
             return Function;
         }
+
         public static string updateFunc()
         {
             if (Columns.Count == 0) return "Error in the lists, The Column List is Empty";
@@ -288,14 +289,14 @@ namespace CodeGenarator
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Paging"", connection);
             command.CommandType = CommandType.StoredProcedure;
-            command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);=
+            command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);
             command.Parameters.AddWithValue(""@PageNumber"", PageNumber);             
             command.Parameters.AddWithValue(""@SortColumn"", string.IsNullOrEmpty(SortColumn) ? (object)DBNull.Value : SortColumn);
             command.Parameters.AddWithValue(""@Direction"", string.IsNullOrEmpty(Direction) ? (object)DBNull.Value : Direction);    
 
             try
             {{
-                await connection.OpenAsync();=
+                await connection.OpenAsync();
                 using SqlDataReader reader = await command.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {{

@@ -119,7 +119,7 @@ namespace CodeGenarator
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
-                DALFuncs.Append(clsDAL.updateFunc();
+                DALFuncs.Append(clsDAL.updateFunc());
                 BLLFuncs.Append(clsBLL.updateFunc());
                 SPs.Append(clsSPs.updateSP());
             }
