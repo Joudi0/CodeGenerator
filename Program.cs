@@ -101,7 +101,6 @@ namespace CodeGenarator
             StringBuilder SPs = new StringBuilder();
             clsHelper.mappedColumns = clsHelper.mappingTheColumns();
 
-            BLLFuncs.Append(clsPresentation.initiateBLL());
             Console.Write("\nFor DAL, BLL, And Stored Procedures:\n");
 
             // Get By:
