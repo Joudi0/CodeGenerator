@@ -11,24 +11,33 @@ namespace CodeGenarator
     {
         public static string tabs = "        ";
 
-        public static string writeProperties()
+        public static string writeProperties(bool full = false)
         {
+            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.getColumnsForCsharp());
             string Properties = "";
-            List<clsHelper.Column> l = new List<clsHelper.Column>(clsHelper.mappedColumns);
-            l.RemoveAll(c => blackList.Contains(c.name));
-            foreach (clsHelper.Column c in l)
+            if(full)
             {
-                Properties += $@"{tabs}public {c.type} {c.name} {{ get; set; }}" + "\n";
+                foreach (clsHelper.Column c in columns)
+                {
+                    Properties += $@"{tabs}public {c.type} {c.name} {{ get; set; }}" + "\n";
+                }
+            }
+            else
+            {
+                columns.RemoveAll(c => blackList.Contains(c.name.ToLower()));
+                foreach (clsHelper.Column c in columns)
+                {
+                    Properties += $@"{tabs}public {c.type} {c.name} {{ get; set; }}" + "\n";
+                }
             }
             return Properties;
         }
 
         public static List<string> blackList = new List<string> { "password",
-        "Password", "IP", "secret", "Salary", "salary", "balance", "Balance",
-        "privateKey"
+        "ip", "secret", "salary", "balance", "privatekey"
         };
         
-        public static string DTOs()
+        public static string BriefDTO()
         {
             string DTO = $@"
 using System;
@@ -36,12 +45,27 @@ using System.Data;
 using System.Threading.Tasks;
 namespace Shared
 {{
-    public class {clsHelper.className}DTO
+    public class {clsHelper.className}BriefDTO
     {{
         {writeProperties()}
     }}
 }}
-
+";
+            return DTO;
+        }
+        public static string FullDTO()
+        {
+            string DTO = $@"
+using System;
+using System.Data;
+using System.Threading.Tasks;
+namespace Shared
+{{
+    public class {clsHelper.className}FullDTO
+    {{
+        {writeProperties(true)}
+    }}
+}}
 ";
             return DTO;
         }

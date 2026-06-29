@@ -100,10 +100,10 @@ namespace CodeGenarator
 
         }
 
-        public static List<Column> mappingTheColumns(List<Column> ogList)
+        public static List<Column> mappingTheColumns()
         {
             List<Column> newList = new List<Column>();
-            foreach (Column col in ogList)
+            foreach (Column col in Columns)
             {
                 Column c = new Column();
                 c.name = col.name;
@@ -254,6 +254,7 @@ namespace CodeGenarator
                 process.WaitForExit();
             }
         }
+
 
         public static void debugThing(object obj)
             {

@@ -5,14 +5,15 @@ using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Tasks;
 using static CodeGenarator.clsHelper;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace CodeGenarator
 {
     public class clsDAL
     {
         // Helpers
-
-        public static string addWithValueAllScript(bool withoutFirst = true)
+        static string tabs = "        ";
+        public static string addWithValueAllScript(bool withoutFirst = true, string dtoParamName = "dto")
         {
             List<Column> newColumns = new List<Column>(getColumnsForCsharp());
             if (withoutFirst) newColumns.RemoveAt(0);
@@ -21,62 +22,95 @@ namespace CodeGenarator
             foreach (Column col in newColumns)
             {
                 script += tabs;
-                if (col.isNullable == "NO") script += $@"command.Parameters.AddWithValue(@""{col.name}"", {col.name});";
+                string propPath = $"{dtoParamName}.{col.name}";
+                if (col.isNullable == "NO") script += $@"command.Parameters.AddWithValue(@""{col.name}"", {propPath});";
                 else if (col.isNullable == "YES")
                 {
                     switch (col.type)
                     {
-                        case "string": script += $@"command.Parameters.AddWithValue(@""{col.name}"", string.IsNullOrEmpty({col.name}) ? DBNull.Value : (object){col.name});"; break;
-                        case "byte": script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({col.name} == 0) ? DBNull.Value : (object){col.name});"; break;
-                        case "decimal":
-                        case "int": script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({col.name} == -1) ? DBNull.Value : (object){col.name});"; break;
-                        case "DateTime": script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({col.name} == DateTime.MinValue) ? DBNull.Value : (object){col.name});"; break;
-                        default: break;
+                case "string":
+                        script += $@"command.Parameters.AddWithValue(@""{col.name}"", string.IsNullOrEmpty({propPath}) ? DBNull.Value : (object){propPath});"; break;
+                case "byte": script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == 0) ? DBNull.Value : (object){propPath});"; break;
+                case "decimal":
+                case "int":
+                                script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == -1) ? DBNull.Value : (object){propPath});"; break;
+                case "DateTime": script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == DateTime.MinValue) ? DBNull.Value : (object){propPath});"; break;
+                default: break;
                     }
                 }
             }
             return script;
         }
 
+        public static string generateFullDTOMapping()
+        {
+            string script = "";
+            string tabs = "                    ";
+
+            foreach (var col in clsHelper.getColumnsForCsharp())
+            {
+                if (col.isNullable == "NO")
+                {
+                    script += $"{tabs}{col.name} = ({col.type})reader[\"{col.name}\"],\n";
+                }
+                else if (col.isNullable == "YES")
+                {
+                    switch (col.type)
+                    {
+                        case "byte": script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? (byte)0 : ({col.type})reader[\"{col.name}\"],\n"; break;
+                        case "decimal":
+                        case "int":
+                            script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? -1 : ({col.type})reader[\"{col.name}\"],\n"; break;
+                        case "string":
+                            script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? \"\" : ({col.type})reader[\"{col.name}\"],\n"; break;
+                        case "DateTime":
+                            script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? DateTime.Now : ({col.type})reader[\"{col.name}\"],\n"; break;
+                        case "bool": script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? false : ({col.type})reader[\"{col.name}\"],\n"; break;
+                        default: script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? null : ({col.type})reader[\"{col.name}\"],\n"; break;
+                    }
+                }
+            }
+            return script.TrimEnd('\n', ',');
+        }
 
         // Actual Functions
 
         public static string getRecordByColumnFunc(Column C)
         {
             if (Columns.Count == 0) return "Error in the lists";
-            string FunctionName = "";
-            if (getColumnIndex(C.name) == 0)
-            {
-                FunctionName = $@"get{objectName}ByID";
-            }
-            else FunctionName = $@"get{objectName}By{C.name}";
-            string Function =
-                $@"public static async Task<DataTable> {FunctionName}({C.type} {C.name})
+            string FunctionName = (getColumnIndex(C.name) == 0) ? $"get{objectName}ByID" : $"get{objectName}By{C.name}";
+    
+    string Function = $@"
+        public static async Task<{clsHelper.className}FullDTO> {FunctionName}({C.type} {C.name})
+        {{
+            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectBy{C.name}"", connection);
+            command.CommandType = CommandType.StoredProcedure;
+            command.Parameters.AddWithValue(""@{C.name}"", {C.name});
+            try
+            {{
+                await connection.OpenAsync();
+                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
                 {{
-                    DataTable dt = new DataTable();
-                    using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-                    using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectBy{C.name}"", connection);
-                    command.CommandType = CommandType.StoredProcedure;
-                    command.Parameters.AddWithValue(""@{C.name}"", {C.name});
-                    try
+                    return new {clsHelper.className}FullDTO
                     {{
-                        await connection.OpenAsync();
-                        using SqlDataReader reader = await command.ExecuteReaderAsync();
-                        if (reader.HasRows) dt.Load(reader);
-                    }}
-                     catch (Exception) {{ throw;}}
+{generateFullDTOMapping()}
+                    }};
+                }}
+            }}
+            catch (Exception) {{ throw; }}
 
-                    return dt;
-                }}";
+            return null;
+        }}";
 
             return Function;
         }
-
-        public static string updateFunc(Column C)
+        public static string updateFunc()
         {
             if (Columns.Count == 0) return "Error in the lists, The Column List is Empty";
-            string Function =
-                $@"        public static async Task<bool> update{objectName}({writeParameters()})
+            string Function = $@"
+        public static async Task<bool> update{objectName}({clsHelper.className}FullDTO dto)
         {{
             int rowsAffected = 0;
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
@@ -97,14 +131,14 @@ namespace CodeGenarator
         public static string addFunc()
         {
             if (Columns.Count == 0) return "Error in the lists";
-            string Function =
-                $@"        public static async Task<int> add{objectName}({writeParameters(0, false)})
+            string Function = $@"
+        public static async Task<int> add{objectName}({clsHelper.className}FullDTO dto)
         {{
             int {objectName}ID = -1;
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Insert"", connection);
             command.CommandType = CommandType.StoredProcedure;
-            {addWithValueAllScript()}
+            {addWithValueAllScript(true)}
             try
             {{
                 await connection.OpenAsync();
@@ -146,9 +180,9 @@ namespace CodeGenarator
         public static string getAllFunc()
         {
             string Function = $@"
-        public static async Task<DataTable> getAll()
+        public static async Task<List<{clsHelper.className}FullDTO>> getAll()
         {{
-            DataTable dt = new DataTable();
+            List<{clsHelper.className}FullDTO> list = new List<{clsHelper.className}FullDTO>();
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAll"", connection);
             command.CommandType = CommandType.StoredProcedure;
@@ -157,11 +191,17 @@ namespace CodeGenarator
             {{
                 await connection.OpenAsync();
                 using SqlDataReader reader = await command.ExecuteReaderAsync();
-                if (reader.HasRows) dt.Load(reader);
+                while (await reader.ReadAsync())
+                {{
+                    list.Add(new {clsHelper.className}FullDTO
+                    {{
+{generateFullDTOMapping()}
+                    }});
+                }}
             }}
             catch (Exception) {{ throw; }}
 
-            return dt;
+            return list;
         }}";
             return Function;
         }
@@ -177,9 +217,9 @@ namespace CodeGenarator
             if (Columns.Count == 0) return "Error in the lists";
 
             string Function = $@"
-        public static async Task<DataTable> {FunctionName}({C.type} {C.name})
+        public static async Task<List<cls{objectName}FullDTO>> {FunctionName}({C.type} {C.name})
         {{
-            DataTable dt = new DataTable();
+            List<{clsHelper.className}FullDTO> list = new List<{clsHelper.className}FullDTO>();
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAllBy{C.name}"", connection);
             command.CommandType = CommandType.StoredProcedure;
@@ -189,11 +229,17 @@ namespace CodeGenarator
             {{
                 await connection.OpenAsync();
                 using SqlDataReader reader = await command.ExecuteReaderAsync();
-                if (reader.HasRows) dt.Load(reader);
+                while (await reader.ReadAsync())
+                {{
+                    list.Add(new {clsHelper.className}FullDTO
+                    {{
+{generateFullDTOMapping()}
+                    }});
+                }}
             }}
             catch (Exception) {{ throw; }}
 
-            return dt;
+            return list;
         }}";
             return Function;
         }
@@ -233,31 +279,35 @@ namespace CodeGenarator
 
         public static string PagingFunc()
         {
-            
             if (Columns.Count == 0) return "Error in the lists";
 
             string Function = $@"
-        public static async Task<DataTable> PagingDAL(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
+        public static async Task<List<{clsHelper.className}FullDTO>> PagingDAL(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
         {{
-            DataTable dt = new DataTable();
+            List<{clsHelper.className}FullDTO> list = new List<{clsHelper.className}FullDTO>();
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Paging"", connection);
             command.CommandType = CommandType.StoredProcedure;
-            command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);
+            command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);=
             command.Parameters.AddWithValue(""@PageNumber"", PageNumber);             
             command.Parameters.AddWithValue(""@SortColumn"", string.IsNullOrEmpty(SortColumn) ? (object)DBNull.Value : SortColumn);
             command.Parameters.AddWithValue(""@Direction"", string.IsNullOrEmpty(Direction) ? (object)DBNull.Value : Direction);    
 
-
             try
             {{
-                await connection.OpenAsync();
+                await connection.OpenAsync();=
                 using SqlDataReader reader = await command.ExecuteReaderAsync();
-                if (reader.HasRows) dt.Load(reader);
+                while (await reader.ReadAsync())
+                {{
+                    list.Add(new {clsHelper.className}FullDTO
+                    {{
+{generateFullDTOMapping()}
+                    }});
+                }}
             }}
             catch (Exception) {{ throw; }}
 
-            return dt;
+            return list;
         }}";
             return Function;
         }

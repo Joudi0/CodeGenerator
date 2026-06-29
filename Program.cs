@@ -24,7 +24,7 @@ namespace CodeGenarator
             AnsiConsole.MarkupLine("[red]Notice:[/] Please ensure database settings are configured in [cyan]clsHelper.connectionString[/].\n");
             Console.Write("First Time? (y/n): ");
             string answer = Console.ReadLine();
-            if(answer.ToLower() == "yes" || answer.ToLower() == "y")
+            if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
                 Console.Write("solution Name: ");
                 string sn = Console.ReadLine();
@@ -48,7 +48,6 @@ namespace CodeGenarator
                     AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator[/]").Justify(Justify.Left));
                     AnsiConsole.MarkupLine("[grey]This tool generates DAL and BLL CRUD ADO.NET for you.[/]");
                     AnsiConsole.MarkupLine("[red]Notice:[/] Please ensure database settings are configured in [cyan]clsHelper.connectionString[/].\n");
-
                 }
                 else
                 {
@@ -57,7 +56,7 @@ namespace CodeGenarator
             } while (more);
 
             AnsiConsole.WriteLine();
-            var signaturePanel = new Panel(
+            Panel signaturePanel = new Panel(
                 new Markup(
                     "[bold white]Developed with ❤️ by:[/] [bold green]Joudi[/]\n" +
                     "[bold white]Telegram:[/] [blue]@Joudi_Adeeb[/]\n" +
@@ -76,11 +75,8 @@ namespace CodeGenarator
 
         public static async Task Run()
         {
-
-
             Console.Write("Enter Table Name: ");
             clsHelper.tableName = Console.ReadLine();
-
             int count = 0;
             do
             {
@@ -89,7 +85,6 @@ namespace CodeGenarator
                 {
                     Console.WriteLine("No Columns Found, Please Enter a Valid Table Name: ");
                     clsHelper.tableName = Console.ReadLine();
-
                 }
                 else
                 {
@@ -98,19 +93,18 @@ namespace CodeGenarator
 
             } while (count == 0);
 
-
             Console.Write("Enter The Class Name For Both DAL And BLL (cls First will be added on it): ");
             clsHelper.objectName = Console.ReadLine();
             string answer = "yes";
             StringBuilder DALFuncs = new StringBuilder();
             StringBuilder BLLFuncs = new StringBuilder();
             StringBuilder SPs = new StringBuilder();
-            clsHelper.mappedColumns = clsHelper.mappingTheColumns(clsHelper.Columns);
+            clsHelper.mappedColumns = clsHelper.mappingTheColumns();
+
             BLLFuncs.Append(clsPresentation.initiateBLL());
             Console.Write("\nFor DAL, BLL, And Stored Procedures:\n");
 
             // Get By:
-
             List<string> getByColumns = clsPresentation.getBy();
             foreach (string colName in getByColumns)
             {
@@ -121,20 +115,16 @@ namespace CodeGenarator
             }
 
             // Update:
-
             Console.Write("update? yes/no: ");
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
-                DALFuncs.Append(clsDAL.updateFunc(clsHelper.mappedColumns[0]));
+                DALFuncs.Append(clsDAL.updateFunc();
                 BLLFuncs.Append(clsBLL.updateFunc());
                 SPs.Append(clsSPs.updateSP());
-
-
             }
 
             // Delete:
-
             Console.Write("delete? yes/no: ");
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
@@ -146,7 +136,6 @@ namespace CodeGenarator
             }
 
             // Add:
-
             Console.Write("add? yes/no: ");
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
@@ -154,11 +143,9 @@ namespace CodeGenarator
                 DALFuncs.Append(clsDAL.addFunc());
                 BLLFuncs.Append(clsBLL.addFunc());
                 SPs.Append(clsSPs.addSP());
-
             }
 
             // isExist:
-
             Console.Write("isExist? yes/no: ");
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
@@ -174,24 +161,25 @@ namespace CodeGenarator
                 }
             }
 
-            // Paging
+            // Paging:
             Console.Write("Paging? yes/no: ");
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
-                    DALFuncs.Append(clsDAL.PagingFunc());
-                    BLLFuncs.Append(clsBLL.PagingFunc());
-                    SPs.Append(clsSPs.PagingSP());
+                DALFuncs.Append(clsDAL.PagingFunc());
+                BLLFuncs.Append(clsBLL.PagingFunc());
+                SPs.Append(clsSPs.PagingSP());
             }
+
             // getAll:
-
-
             Console.Write("getAll? yes/no: ");
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
                 DALFuncs.Append(clsDAL.getAllFunc());
-                BLLFuncs.Append(clsBLL.getAllFunc());
+                BLLFuncs.Append(clsBLL.getAllFullBLLFunc());
+                BLLFuncs.Append(clsBLL.getAllBriefBLLFunc());
+
                 SPs.Append(clsSPs.selectAllSP());
                 Console.Write("GetAll Method Generated, do you want 'GetAll By' ? (yes/no): ");
                 answer = Console.ReadLine();
@@ -204,18 +192,13 @@ namespace CodeGenarator
                         SPs.Append(clsSPs.selectAllBySP(column));
                         BLLFuncs.Append(clsBLL.getAllByFunc(column));
                         DALFuncs.Append(clsDAL.getAllByColumnFunc(column));
-
                     }
                 }
             }
-            Console.Write("For BLL: Save Method? yes/no: ");
-            answer = Console.ReadLine();
-            if (answer.ToLower() == "yes" || answer.ToLower() == "y")
-            {
-                BLLFuncs.Append(clsBLL.saveFunc());
-            }
+
             await saveFilesAsync(DALFuncs, BLLFuncs, SPs);
         }
+
         public static async Task saveFilesAsync(StringBuilder DALFuncs, StringBuilder BLLFuncs, StringBuilder SPs)
         {
             try
@@ -239,11 +222,13 @@ namespace CodeGenarator
                 {
                     Directory.CreateDirectory(DTO);
                 }
+
                 // file paths
                 string spPath = Path.Combine(_projectDirectory, $"{clsHelper.tableName}_SPs.sql");
                 string dalPath = Path.Combine(DAL, $"{clsHelper.className}DAL.cs");
                 string bllPath = Path.Combine(BLL, $"{clsHelper.className}.cs");
-                string DTOPath = Path.Combine(DTO, $"{clsHelper.className}DTO.cs");
+                string BriefDTOPath = Path.Combine(DTO, $"{clsHelper.className}BriefDTO.cs");
+                string FullDTOPath = Path.Combine(DTO, $"{clsHelper.className}FullDTO.cs");
 
                 // Save files
                 Console.Write("-> Making Stored Procedures... ");
@@ -272,9 +257,13 @@ namespace CodeGenarator
 
                 Console.Write("-> Making DTO Class... ");
                 await Task.Delay(1000);
-                using (StreamWriter writer = new StreamWriter(DTOPath))
+                using (StreamWriter writer = new StreamWriter(BriefDTOPath))
                 {
-                    await writer.WriteAsync(clsAPIs.DTOs());
+                    await writer.WriteAsync(clsAPIs.BriefDTO());
+                }
+                using (StreamWriter writer = new StreamWriter(FullDTOPath))
+                {
+                    await writer.WriteAsync(clsAPIs.FullDTO());
                 }
                 Console.WriteLine("[Done]");
 
@@ -282,7 +271,8 @@ namespace CodeGenarator
                 AnsiConsole.MarkupLine($"[grey]Stored Procedures:[/] [cyan]{spPath}[/]");
                 AnsiConsole.MarkupLine($"[grey]DAL Class:[/] [cyan]{dalPath}[/]");
                 AnsiConsole.MarkupLine($"[grey]BLL Class:[/] [cyan]{bllPath}[/]");
-                AnsiConsole.MarkupLine($"[grey]DTO Class:[/] [cyan]{DTOPath}[/]");
+
+                AnsiConsole.MarkupLine($"[grey]DTO Class:[/] [cyan]{DTO}[/]");
             }
             catch (Exception ex)
             {
