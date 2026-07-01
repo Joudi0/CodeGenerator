@@ -18,6 +18,7 @@ namespace CodeGenarator
 
         public static List<Column> Columns;
         public static List<Column> mappedColumns;
+        public static List<Column> ColumnsForCsharp;
 
         public static Column makeMappedColumnByName(string name)
         {
@@ -211,30 +212,85 @@ namespace CodeGenarator
         {
             if (!Directory.Exists(targetDirectory))
                 Directory.CreateDirectory(targetDirectory);
+            // making Libraries
             RunDotNetCommand(targetDirectory, $"new sln -n {solutionName}");
-            RunDotNetCommand(targetDirectory, "new classlib -n DAL -f net8.0");
-            RunDotNetCommand(targetDirectory, "new classlib -n BLL -f net8.0");
-            RunDotNetCommand(targetDirectory, "new classlib -n Shared -f net8.0");
-            RunDotNetCommand(targetDirectory, "new webapi -n WebAPI -f net8.0"); // PL
+            RunDotNetCommand(targetDirectory, "new classlib -n DAL -f net10.0");
+            RunDotNetCommand(targetDirectory, "new classlib -n BLL -f net10.0");
+            RunDotNetCommand(targetDirectory, "new classlib -n Shared -f net10.0");
+            RunDotNetCommand(targetDirectory, "new webapi -n WebAPI -f net10.0"); // PL
 
             RunDotNetCommand(targetDirectory, $"sln {solutionName}.sln add Shared/Shared.csproj DAL/DAL.csproj BLL/BLL.csproj WebAPI/WebAPI.csproj");
+
+            // Main Folders/Libraries
             string dalFolder = Path.Combine(targetDirectory, "DAL");
             string bllFolder = Path.Combine(targetDirectory, "BLL");
             string webApiFolder = Path.Combine(targetDirectory, "WebAPI");
+            string sharedFolder = Path.Combine(targetDirectory, "Shared");
 
-            RunDotNetCommand(bllFolder, "add reference ../DAL/DAL.csproj");
-            RunDotNetCommand(webApiFolder, "add reference ../BLL/BLL.csproj");
+            // Files to delete
             string dalClass1 = Path.Combine(targetDirectory, "DAL", "Class1.cs");
             string bllClass1 = Path.Combine(targetDirectory, "BLL", "Class1.cs");
             string sharedClass1 = Path.Combine(targetDirectory, "Shared", "Class1.cs");
+            string webApiWeatherFile = Path.Combine(targetDirectory, "WebAPI", "WeatherForecast.cs");
+            string webApiWeatherController = Path.Combine(targetDirectory, "WebAPI", "Controllers", "WeatherForecastController.cs");
 
+            // adding refrences
+            RunDotNetCommand(bllFolder, "add reference ../DAL/DAL.csproj");
+            RunDotNetCommand(webApiFolder, "add reference ../BLL/BLL.csproj");
             RunDotNetCommand(dalFolder, "add reference ../Shared/Shared.csproj");
             RunDotNetCommand(bllFolder, "add reference ../Shared/Shared.csproj");
             RunDotNetCommand(webApiFolder, "add reference ../Shared/Shared.csproj");
 
+            // Deleting extra files
             if (File.Exists(dalClass1)) File.Delete(dalClass1);
             if (File.Exists(bllClass1)) File.Delete(bllClass1);
             if (File.Exists(sharedClass1)) File.Delete(sharedClass1);
+            if (File.Exists(webApiWeatherFile)) File.Delete(webApiWeatherFile);
+            if (File.Exists(webApiWeatherController)) File.Delete(webApiWeatherController);
+
+            // Separating DTOs into Brief and Full
+            string briefDtoFolder = Path.Combine(sharedFolder, "DTOs", "Brief");
+            string fullDtoFolder = Path.Combine(sharedFolder, "DTOs", "Full");
+
+            if (!Directory.Exists(briefDtoFolder)) Directory.CreateDirectory(briefDtoFolder);
+            if (!Directory.Exists(fullDtoFolder)) Directory.CreateDirectory(fullDtoFolder);
+
+            // Adding AuthController to WebAPI project
+            string controllersFolder = Path.Combine(webApiFolder, "Controllers");
+            if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
+
+            string authControllerPath = Path.Combine(controllersFolder, "AuthController.cs");
+            string authControllerCode = @"using Microsoft.AspNetCore.Mvc;
+namespace WebAPI.Controllers
+{
+    [ApiController]
+    [Route(""api/[controller]"")]
+    public class AuthController : ControllerBase
+    {
+        // TODO: Add Endpoints for authentication (login, register, etc.)
+    }
+}";
+            File.WriteAllText(authControllerPath, authControllerCode);
+
+            // Uppdating Program.cs File
+            string programCsPath = Path.Combine(targetDirectory, "WebAPI", "Program.cs");
+
+            string cleanProgramCode = @"WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+
+// Remember to Add needed CORS And Authentication
+builder.Services.AddControllers(); 
+
+var app = builder.Build();
+
+// Forcing HTTPS
+app.UseHttpsRedirection();
+
+app.UseAuthorization();
+
+app.MapControllers();
+
+app.Run();";
+            File.WriteAllText(programCsPath, cleanProgramCode);
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
@@ -254,7 +310,6 @@ namespace CodeGenarator
                 process.WaitForExit();
             }
         }
-
 
         public static void debugThing(object obj)
             {

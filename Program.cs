@@ -5,6 +5,7 @@ using System.Configuration;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using static CodeGenarator.clsHelper;
 
 namespace CodeGenarator
 {
@@ -96,11 +97,13 @@ namespace CodeGenarator
             Console.Write("Enter The Class Name For Both DAL And BLL (cls First will be added on it): ");
             clsHelper.objectName = Console.ReadLine();
             string answer = "yes";
+            StringBuilder SPs = new StringBuilder();
             StringBuilder DALFuncs = new StringBuilder();
             StringBuilder BLLFuncs = new StringBuilder();
-            StringBuilder SPs = new StringBuilder();
-            clsHelper.mappedColumns = clsHelper.mappingTheColumns();
+            StringBuilder Controller = new StringBuilder();
 
+            clsHelper.mappedColumns = clsHelper.mappingTheColumns();
+            clsHelper.ColumnsForCsharp = clsHelper.getColumnsForCsharp();
             Console.Write("\nFor DAL, BLL, And Stored Procedures:\n");
 
             // Get By:
@@ -111,6 +114,7 @@ namespace CodeGenarator
                 SPs.Append(clsSPs.selectByColumnSP(column));
                 DALFuncs.Append(clsDAL.getRecordByColumnFunc(column));
                 BLLFuncs.Append(clsBLL.getByFunc(column));
+                Controller.Append(clsAPIs.getByAction(column));
             }
 
             // Update:
@@ -118,9 +122,10 @@ namespace CodeGenarator
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
+                SPs.Append(clsSPs.updateSP());
                 DALFuncs.Append(clsDAL.updateFunc());
                 BLLFuncs.Append(clsBLL.updateFunc());
-                SPs.Append(clsSPs.updateSP());
+                Controller.Append(clsAPIs.updateAction());
             }
 
             // Delete:
@@ -129,9 +134,10 @@ namespace CodeGenarator
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
                 clsHelper.Column C = clsHelper.mappedColumns[0];
+                SPs.Append(clsSPs.deleteSP());
                 DALFuncs.Append(clsDAL.deleteFunc(C));
                 BLLFuncs.Append(clsBLL.deleteFunc(C));
-                SPs.Append(clsSPs.deleteSP());
+                Controller.Append(clsAPIs.deleteAction(C));
             }
 
             // Add:
@@ -139,9 +145,10 @@ namespace CodeGenarator
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
+                SPs.Append(clsSPs.addSP());
                 DALFuncs.Append(clsDAL.addFunc());
                 BLLFuncs.Append(clsBLL.addFunc());
-                SPs.Append(clsSPs.addSP());
+                Controller.Append(clsAPIs.addAction());
             }
 
             // isExist:
@@ -154,9 +161,10 @@ namespace CodeGenarator
                 {
                     clsHelper.Column column = clsHelper.makeColumnByName(colName);
 
+                    SPs.Append(clsSPs.isExistByColumnSP(column));
                     DALFuncs.Append(clsDAL.isExistsFunc(column));
                     BLLFuncs.Append(clsBLL.isExistsFunc(column));
-                    SPs.Append(clsSPs.isExistByColumnSP(column));
+                    Controller.Append(clsAPIs.isExistAction(column));
                 }
             }
 
@@ -165,9 +173,10 @@ namespace CodeGenarator
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
+                SPs.Append(clsSPs.PagingSP());
                 DALFuncs.Append(clsDAL.PagingFunc());
                 BLLFuncs.Append(clsBLL.PagingFunc());
-                SPs.Append(clsSPs.PagingSP());
+                Controller.Append(clsAPIs.pagingAction());
             }
 
             // getAll:
@@ -175,9 +184,14 @@ namespace CodeGenarator
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
+                clsHelper.Column firstColumn = clsHelper.ColumnsForCsharp[0];
                 DALFuncs.Append(clsDAL.getAllFunc());
-                BLLFuncs.Append(clsBLL.getAllFullBLLFunc());
-                BLLFuncs.Append(clsBLL.getAllBriefBLLFunc());
+
+                BLLFuncs.Append(clsBLL.getAllBriefByFunc(firstColumn));
+                BLLFuncs.Append(clsBLL.getAllFullByFunc(firstColumn));
+
+                Controller.Append(clsAPIs.getAllBriefByAction(firstColumn));
+                Controller.Append(clsAPIs.getAllFullByAction(firstColumn));
 
                 SPs.Append(clsSPs.selectAllSP());
                 Console.Write("GetAll Method Generated, do you want 'GetAll By' ? (yes/no): ");
@@ -189,16 +203,20 @@ namespace CodeGenarator
                     {
                         clsHelper.Column column = clsHelper.makeColumnByName(colName);
                         SPs.Append(clsSPs.selectAllBySP(column));
-                        BLLFuncs.Append(clsBLL.getAllByFunc(column));
                         DALFuncs.Append(clsDAL.getAllByColumnFunc(column));
+
+                        BLLFuncs.Append(clsBLL.getAllBriefByFunc(column));
+                        BLLFuncs.Append(clsBLL.getAllFullByFunc(column));
+
+                        Controller.Append(clsAPIs.getAllBriefByAction(column));
+                        Controller.Append(clsAPIs.getAllFullByAction(column));
                     }
                 }
             }
 
-            await saveFilesAsync(DALFuncs, BLLFuncs, SPs);
+            await saveFilesAsync(SPs, DALFuncs, BLLFuncs, Controller);
         }
-
-        public static async Task saveFilesAsync(StringBuilder DALFuncs, StringBuilder BLLFuncs, StringBuilder SPs)
+        public static async Task saveFilesAsync(StringBuilder SPs, StringBuilder DALFuncs, StringBuilder BLLFuncs, StringBuilder Controller)
         {
             try
             {
@@ -206,28 +224,28 @@ namespace CodeGenarator
                 {
                     Directory.CreateDirectory(_projectDirectory);
                 }
-                string DAL = _projectDirectory + "\\DAL";
-                string BLL = _projectDirectory + "\\BLL";
-                string DTO = _projectDirectory + "\\Shared\\DTOs";
-                if (!Directory.Exists(DAL))
-                {
-                    Directory.CreateDirectory(DAL);
-                }
-                if (!Directory.Exists(BLL))
-                {
-                    Directory.CreateDirectory(BLL);
-                }
-                if (!Directory.Exists(DTO))
-                {
-                    Directory.CreateDirectory(DTO);
-                }
+                // Check for Folders
+                string dal = Path.Combine(_projectDirectory, "DAL");
+                string bll = Path.Combine(_projectDirectory, "BLL");
+                string dto = Path.Combine(_projectDirectory, "Shared", "DTOs");
+                string briefDto = Path.Combine(dto, "Brief");
+                string fullDto = Path.Combine(dto, "Full");
+                string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
 
-                // file paths
+                if (!Directory.Exists(dal)) Directory.CreateDirectory(dal);
+                if (!Directory.Exists(bll)) Directory.CreateDirectory(bll);
+                if (!Directory.Exists(dto)) Directory.CreateDirectory(dto);
+                if (!Directory.Exists(briefDto)) Directory.CreateDirectory(briefDto);
+                if (!Directory.Exists(fullDto)) Directory.CreateDirectory(fullDto);
+                if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
+
+                // Exact file paths
                 string spPath = Path.Combine(_projectDirectory, $"{clsHelper.tableName}_SPs.sql");
-                string dalPath = Path.Combine(DAL, $"{clsHelper.className}DAL.cs");
-                string bllPath = Path.Combine(BLL, $"{clsHelper.className}.cs");
-                string BriefDTOPath = Path.Combine(DTO, $"{clsHelper.className}BriefDTO.cs");
-                string FullDTOPath = Path.Combine(DTO, $"{clsHelper.className}FullDTO.cs");
+                string dalPath = Path.Combine(dal, $"{clsHelper.className}DAL.cs");
+                string bllPath = Path.Combine(bll, $"{clsHelper.className}.cs");
+                string BriefDTOPath = Path.Combine(briefDto, $"{clsHelper.className}BriefDTO.cs");
+                string FullDTOPath = Path.Combine(fullDto, $"{clsHelper.className}FullDTO.cs");
+                string controllerPath = Path.Combine(controllersFolder, $"{clsHelper.objectName}Controller.cs");
 
                 // Save files
                 Console.Write("-> Making Stored Procedures... ");
@@ -266,12 +284,20 @@ namespace CodeGenarator
                 }
                 Console.WriteLine("[Done]");
 
+                Console.Write("-> Making Web API Controller... ");
+                await Task.Delay(1000);
+                using (StreamWriter writer = new StreamWriter(controllerPath))
+                {
+                    await writer.WriteAsync(clsAPIs.controllerStructure(Controller));
+                }
+                Console.WriteLine("[Done]");
+
                 AnsiConsole.MarkupLine($"\n[green]Success:[/] Files generated and saved successfully!");
                 AnsiConsole.MarkupLine($"[grey]Stored Procedures:[/] [cyan]{spPath}[/]");
                 AnsiConsole.MarkupLine($"[grey]DAL Class:[/] [cyan]{dalPath}[/]");
                 AnsiConsole.MarkupLine($"[grey]BLL Class:[/] [cyan]{bllPath}[/]");
-
-                AnsiConsole.MarkupLine($"[grey]DTO Class:[/] [cyan]{DTO}[/]");
+                AnsiConsole.MarkupLine($"[grey]Web API Controller:[/] [cyan]{controllerPath}[/]");
+                AnsiConsole.MarkupLine($"[grey]DTO Class:[/] [cyan]{dto}[/]");
             }
             catch (Exception ex)
             {

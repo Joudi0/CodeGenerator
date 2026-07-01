@@ -43,15 +43,12 @@ namespace CodeGenarator
             string functionName = (columnIndex == 0) ? $"get{clsHelper.objectName}ByID" : $"get{clsHelper.objectName}By{C.name}";
 
             return $@"
-        public static async Task<{clsHelper.className}BriefDTO> {functionName}({C.type} {C.name})
+        public static async Task<{clsHelper.className}FullDTO> {functionName}({C.type} {C.name})
         {{
             {clsHelper.className}FullDTO fullDto = await {DALName}.{functionName}({C.name});
             if (fullDto == null) return null;
 
-            return new {clsHelper.className}BriefDTO
-            {{
-{generateBriefMapping("fullDto.")}
-            }};
+            return fullDto;
         }}
 ";
         }
@@ -91,37 +88,6 @@ namespace CodeGenarator
 ";
         }
 
-        public static string getAllFullBLLFunc()
-        {
-            return $@"
-        public static Task<List<{clsHelper.className}FullDTO>> getAllFull()
-        {{
-            return {DALName}.getAll();
-        }}
-";
-        }
-
-        public static string getAllBriefBLLFunc()
-        {
-            return $@"
-        public static async Task<List<{clsHelper.className}BriefDTO>> getAllBrief()
-        {{
-            List<{clsHelper.className}FullDTO> fullList = await {DALName}.getAll();
-            List<{clsHelper.className}BriefDTO> briefList = new List<{clsHelper.className}BriefDTO>();
-            
-            foreach ({clsHelper.className}FullDTO item in fullList)
-            {{
-                briefList.Add(new {clsHelper.className}BriefDTO
-                {{
-{generateBriefMapping()}
-                }});
-            }}
-            
-            return briefList;
-        }}
-";
-        }
-
         public static string PagingFunc()
         {
             return $@"
@@ -143,29 +109,53 @@ namespace CodeGenarator
 ";
         }
 
-        public static string getAllByFunc(clsHelper.Column C)
+        public static string getAllBriefByFunc(clsHelper.Column C)
         {
-            string functionName = (clsHelper.getColumnIndex(C.name) == 0) ? $"getAllByID" : $"getAllBy{C.name}";
-            string existFuncName = (clsHelper.getColumnIndex(C.name) == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
+            int columnIndex = clsHelper.getColumnIndex(C.name);
+
+            string functionName = (columnIndex == 0) ? $"getAllBriefByID" : $"getAllBriefBy{C.name}";
+            string dalFunctionName = (columnIndex == 0) ? $"getAllByID" : $"getAllBy{C.name}";
+            string existFuncName = (columnIndex == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
 
             return $@"
         public static async Task<List<{clsHelper.className}BriefDTO>> {functionName}({C.type} {C.name})
         {{
             if (await {existFuncName}({C.name}))
             {{
-                List<{clsHelper.className}FullDTO> fullList = await {DALName}.{functionName}({C.name});
+                //  Fetching the full list from DAL
+                List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({C.name});
                 List<{clsHelper.className}BriefDTO> briefList = new List<{clsHelper.className}BriefDTO>();
                 
+                // looping through the full list and mapping to brief DTO
                 foreach ({clsHelper.className}FullDTO item in fullList)
                 {{
-                    briefList.Add(new {clsHelper.className}BriefDTO
+                    briefList.Add(new {clsHelper.className}BriefDTO)
                     {{
-{generateBriefMapping()}
+{generateBriefMapping("item.")}
                     }});
                 }}
                 return briefList;
             }}
             return new List<{clsHelper.className}BriefDTO>();
+        }}
+";
+        }
+
+        public static string getAllFullByFunc(clsHelper.Column C)
+        {
+            int columnIndex = clsHelper.getColumnIndex(C.name);
+            string dalFunctionName = (columnIndex == 0) ? $"getAllByID" : $"getAllBy{C.name}";
+            string functionName = (columnIndex == 0) ? $"getAllFullByID" : $"getAllFullBy{C.name}";
+            string existFuncName = (columnIndex == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
+            return $@"
+        public static async Task<List<{clsHelper.className}FullDTO>> {functionName}({C.type} {C.name})
+        {{
+            if (await {existFuncName}({C.name}))
+            {{
+                List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({C.name});
+                return fullList;
+            }}
+            return new List<{clsHelper.className}FullDTO>();
         }}
 ";
         }
