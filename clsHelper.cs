@@ -247,17 +247,20 @@ namespace CodeGenarator
             if (File.Exists(webApiWeatherFile)) File.Delete(webApiWeatherFile);
             if (File.Exists(webApiWeatherController)) File.Delete(webApiWeatherController);
 
-            // Separating DTOs into Brief and Full
+            // Separating DTOs into Brief and Full and Auth
             string briefDtoFolder = Path.Combine(sharedFolder, "DTOs", "Brief");
             string fullDtoFolder = Path.Combine(sharedFolder, "DTOs", "Full");
+            string AuthDtoFolder = Path.Combine(sharedFolder, "DTOs", "Auth");
 
             if (!Directory.Exists(briefDtoFolder)) Directory.CreateDirectory(briefDtoFolder);
             if (!Directory.Exists(fullDtoFolder)) Directory.CreateDirectory(fullDtoFolder);
+            if (!Directory.Exists(AuthDtoFolder)) Directory.CreateDirectory(AuthDtoFolder);
 
             // Adding AuthController to WebAPI project
             string controllersFolder = Path.Combine(webApiFolder, "Controllers");
             if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
 
+            // Creating AuthController.cs file
             string authControllerPath = Path.Combine(controllersFolder, "AuthController.cs");
             string authControllerCode = @"using Microsoft.AspNetCore.Mvc;
 namespace WebAPI.Controllers
@@ -322,6 +325,9 @@ namespace Shared
     }
 }";
             File.WriteAllText(securityHelperPath, securityHelperCode);
+
+            
+
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)

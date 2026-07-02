@@ -33,7 +33,8 @@ namespace CodeGenarator
         }
 
         public static List<string> blackList = new List<string> { "password",
-        "ip", "secret", "salary", "balance", "privatekey"
+        "ip", "secret", "salary", "balance", "privatekey",
+        "passwordhash", "password_hash", "passwordsalt", "password_salt", "secret"
         };
 
         public static string BriefDTO()
@@ -90,7 +91,11 @@ namespace Shared.DTOs.Auth
         // ==========================================
         //  Web API Controllers
         // ==========================================
+        public static string prepareForLogin()
+        {
 
+            return $@"";
+        }
         public static string getByAction(clsHelper.Column C)
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);

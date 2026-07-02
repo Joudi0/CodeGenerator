@@ -92,6 +92,7 @@ namespace CodeGenarator
                 clsHelper.allSPs.Add(clsSPs.loginSP());
                 DALFuncs.Append(clsDAL.getAuthData());
                 BLLFuncs.Append(clsBLL.checkLogin());
+                Controller.Append(clsAPIs.loginAction());
             }
             Console.Write($"\nEnter The Class Name For {tableName} (cls First will be added on it): ");
             clsHelper.objectName = Console.ReadLine();
@@ -227,7 +228,6 @@ namespace CodeGenarator
                 string dto = Path.Combine(_projectDirectory, "Shared", "DTOs");
                 string briefDto = Path.Combine(dto, "Brief");
                 string fullDto = Path.Combine(dto, "Full");
-                string authDto = Path.Combine(dto, "Auth");
                 string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
 
                 if (!Directory.Exists(dal)) Directory.CreateDirectory(dal);
@@ -237,7 +237,7 @@ namespace CodeGenarator
                 if (!Directory.Exists(fullDto)) Directory.CreateDirectory(fullDto);
                 if(isUserTable)
                 {
-                    if (!Directory.Exists(authDto)) Directory.CreateDirectory(authDto);
+                    await Auth();
                 }
                 if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
 
@@ -246,17 +246,14 @@ namespace CodeGenarator
                 string bllPath = Path.Combine(bll, $"{clsHelper.className}.cs");
                 string BriefDTOPath = Path.Combine(briefDto, $"{clsHelper.className}BriefDTO.cs");
                 string FullDTOPath = Path.Combine(fullDto, $"{clsHelper.className}FullDTO.cs");
-                string AuthDTOPath = Path.Combine(authDto, $"AuthDTO.cs");
                 string controllerPath = Path.Combine(controllersFolder, $"{clsHelper.objectName}Controller.cs");
 
                 // Save files
                 Console.Write("-> Making Stored Procedures... ");
-                await Task.Delay(1000);
                 clsHelper.InjectAllToDB();
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making DAL Class... ");
-                await Task.Delay(1000);
                 using (StreamWriter writer = new StreamWriter(dalPath))
                 {
                     await writer.WriteAsync(clsDAL.classStructure(DALFuncs));
@@ -264,7 +261,6 @@ namespace CodeGenarator
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making BLL Class... ");
-                await Task.Delay(1000);
                 using (StreamWriter writer = new StreamWriter(bllPath))
                 {
                     await writer.WriteAsync(clsBLL.classStructure(BLLFuncs));
@@ -272,7 +268,6 @@ namespace CodeGenarator
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making DTO Class... ");
-                await Task.Delay(1000);
                 using (StreamWriter writer = new StreamWriter(BriefDTOPath))
                 {
                     await writer.WriteAsync(clsAPIs.BriefDTO());
@@ -281,13 +276,7 @@ namespace CodeGenarator
                 {
                     await writer.WriteAsync(clsAPIs.FullDTO());
                 }
-                if(isUserTable)
-                {
-                    using (StreamWriter writer = new StreamWriter(AuthDTOPath))
-                    {
-                        await writer.WriteAsync(clsAPIs.SecurityDTO());
-                    }
-                }
+                
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making Web API Controller... ");
@@ -308,6 +297,81 @@ namespace CodeGenarator
             catch (Exception ex)
             {
                 AnsiConsole.MarkupLine($"\n[red]Error while saving files:[/] {ex.Message}");
+            }
+        }
+
+        public static async Task Auth()
+        {
+            // Adding clsTokenService to Shared project
+            string webApiServicesFolder = Path.Combine(_projectDirectory, "WebAPI", "Services");
+            if (!Directory.Exists(webApiServicesFolder)) Directory.CreateDirectory(webApiServicesFolder);
+
+            string clsTokenServicePath = Path.Combine(webApiServicesFolder, "clsTokenService.cs");
+            string clsTokenService = @"
+using System;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+
+namespace WebAPI.Services
+{
+    public class clsTokenService
+    {
+        private readonly IConfiguration _configuration;
+        
+        // Constructor to inject IConfiguration
+        public clsTokenService(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
+        public string GenerateJWTToken(string username, int userId)
+        {
+            // 1. Reading JWT settings from configuration
+            var jwtSettings = _configuration.GetSection(""JwtSettings"");
+            var secretKey = jwtSettings[""SecretKey""];
+            var issuer = jwtSettings[""Issuer""];
+            var audience = jwtSettings[""Audience""];
+            var expirationInHours = Convert.ToDouble(jwtSettings[""ExpirationInHours""] ?? ""1"");
+
+            // 2. Claims creation (you can add more claims as needed)
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                new Claim(ClaimTypes.Name, username),
+                new Claim(ClaimTypes.Role, ""User"") // additional roles can be added here
+            };
+
+            // 3.making the signing key and credentials
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            // 4. making the token 128 bit
+            var token = new JwtSecurityToken(
+                issuer: issuer,
+                audience: audience,
+                claims: claims,
+                expires: DateTime.Now.AddHours(expirationInHours),
+                signingCredentials: creds
+            );
+
+            // 5. finally, return the token as a string
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+    }
+}
+";
+            File.WriteAllText(clsTokenServicePath, clsTokenService);
+
+            // Adding AuthDTO to Shared/DTOs/Auth folder
+            string authDto = Path.Combine(_projectDirectory, "Shared", "DTOs", "Auth");
+            if (!Directory.Exists(authDto)) Directory.CreateDirectory(authDto);
+            string AuthDTOPath = Path.Combine(authDto, $"AuthDTO.cs");
+            using (StreamWriter writer = new StreamWriter(AuthDTOPath))
+            {
+                await writer.WriteAsync(clsAPIs.SecurityDTO());
             }
         }
     }
