@@ -311,6 +311,39 @@ app.Run();";
             }
         }
 
+        public static List<string> allSPs = new List<string>();
+
+        public static void InjectAllToDB()
+        {
+            string connectionString = ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString;
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                conn.Open();
+                using (SqlTransaction transaction = conn.BeginTransaction())
+                {
+                    try
+                    {
+                        foreach (string spCode in allSPs)
+                        {
+                            using (SqlCommand cmd = new SqlCommand(spCode, conn, transaction))
+                            {
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+
+                        transaction.Commit();
+                        Console.WriteLine("All Stored Procedures are injected in the database successfully!.");
+                    }
+                    catch (Exception ex)
+                    {
+                        transaction.Rollback();
+                        Console.WriteLine($"Error so no SPs are saved: {ex.Message}");
+                    }
+                }
+            }
+            allSPs.Clear();
+        }
+
         public static void debugThing(object obj)
             {
                 Type type = obj.GetType();

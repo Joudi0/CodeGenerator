@@ -97,7 +97,6 @@ namespace CodeGenarator
             Console.Write("Enter The Class Name For Both DAL And BLL (cls First will be added on it): ");
             clsHelper.objectName = Console.ReadLine();
             string answer = "yes";
-            StringBuilder SPs = new StringBuilder();
             StringBuilder DALFuncs = new StringBuilder();
             StringBuilder BLLFuncs = new StringBuilder();
             StringBuilder Controller = new StringBuilder();
@@ -111,7 +110,7 @@ namespace CodeGenarator
             foreach (string colName in getByColumns)
             {
                 clsHelper.Column column = clsHelper.makeColumnByName(colName);
-                SPs.Append(clsSPs.selectByColumnSP(column));
+                clsHelper.allSPs.Add(clsSPs.selectByColumnSP(column));
                 DALFuncs.Append(clsDAL.getRecordByColumnFunc(column));
                 BLLFuncs.Append(clsBLL.getByFunc(column));
                 Controller.Append(clsAPIs.getByAction(column));
@@ -122,7 +121,7 @@ namespace CodeGenarator
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
-                SPs.Append(clsSPs.updateSP());
+                clsHelper.allSPs.Add(clsSPs.updateSP());
                 DALFuncs.Append(clsDAL.updateFunc());
                 BLLFuncs.Append(clsBLL.updateFunc());
                 Controller.Append(clsAPIs.updateAction());
@@ -134,7 +133,7 @@ namespace CodeGenarator
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
                 clsHelper.Column C = clsHelper.mappedColumns[0];
-                SPs.Append(clsSPs.deleteSP());
+                clsHelper.allSPs.Add(clsSPs.deleteSP());
                 DALFuncs.Append(clsDAL.deleteFunc(C));
                 BLLFuncs.Append(clsBLL.deleteFunc(C));
                 Controller.Append(clsAPIs.deleteAction(C));
@@ -145,7 +144,7 @@ namespace CodeGenarator
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
-                SPs.Append(clsSPs.addSP());
+                clsHelper.allSPs.Add(clsSPs.addSP());
                 DALFuncs.Append(clsDAL.addFunc());
                 BLLFuncs.Append(clsBLL.addFunc());
                 Controller.Append(clsAPIs.addAction());
@@ -161,7 +160,7 @@ namespace CodeGenarator
                 {
                     clsHelper.Column column = clsHelper.makeColumnByName(colName);
 
-                    SPs.Append(clsSPs.isExistByColumnSP(column));
+                    clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(column));
                     DALFuncs.Append(clsDAL.isExistsFunc(column));
                     BLLFuncs.Append(clsBLL.isExistsFunc(column));
                     Controller.Append(clsAPIs.isExistAction(column));
@@ -173,7 +172,7 @@ namespace CodeGenarator
             answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
-                SPs.Append(clsSPs.PagingSP());
+                clsHelper.allSPs.Add(clsSPs.PagingSP());
                 DALFuncs.Append(clsDAL.PagingFunc());
                 BLLFuncs.Append(clsBLL.PagingFunc());
                 Controller.Append(clsAPIs.pagingAction());
@@ -193,7 +192,7 @@ namespace CodeGenarator
                 Controller.Append(clsAPIs.getAllBriefByAction(firstColumn));
                 Controller.Append(clsAPIs.getAllFullByAction(firstColumn));
 
-                SPs.Append(clsSPs.selectAllSP());
+                clsHelper.allSPs.Add(clsSPs.selectAllSP());
                 Console.Write("GetAll Method Generated, do you want 'GetAll By' ? (yes/no): ");
                 answer = Console.ReadLine();
                 if (answer.ToLower() == "yes" || answer.ToLower() == "y")
@@ -202,7 +201,7 @@ namespace CodeGenarator
                     foreach (string colName in Columns)
                     {
                         clsHelper.Column column = clsHelper.makeColumnByName(colName);
-                        SPs.Append(clsSPs.selectAllBySP(column));
+                        clsHelper.allSPs.Add(clsSPs.selectAllBySP(column));
                         DALFuncs.Append(clsDAL.getAllByColumnFunc(column));
 
                         BLLFuncs.Append(clsBLL.getAllBriefByFunc(column));
@@ -214,9 +213,9 @@ namespace CodeGenarator
                 }
             }
 
-            await saveFilesAsync(SPs, DALFuncs, BLLFuncs, Controller);
+            await saveFilesAsync(DALFuncs, BLLFuncs, Controller);
         }
-        public static async Task saveFilesAsync(StringBuilder SPs, StringBuilder DALFuncs, StringBuilder BLLFuncs, StringBuilder Controller)
+        public static async Task saveFilesAsync(StringBuilder DALFuncs, StringBuilder BLLFuncs, StringBuilder Controller)
         {
             try
             {
@@ -240,7 +239,6 @@ namespace CodeGenarator
                 if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
 
                 // Exact file paths
-                string spPath = Path.Combine(_projectDirectory, $"{clsHelper.tableName}_SPs.sql");
                 string dalPath = Path.Combine(dal, $"{clsHelper.className}DAL.cs");
                 string bllPath = Path.Combine(bll, $"{clsHelper.className}.cs");
                 string BriefDTOPath = Path.Combine(briefDto, $"{clsHelper.className}BriefDTO.cs");
@@ -250,10 +248,7 @@ namespace CodeGenarator
                 // Save files
                 Console.Write("-> Making Stored Procedures... ");
                 await Task.Delay(1000);
-                using (StreamWriter writer = new StreamWriter(spPath))
-                {
-                    await writer.WriteAsync(SPs.ToString());
-                }
+                clsHelper.InjectAllToDB();
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making DAL Class... ");
