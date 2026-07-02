@@ -32,29 +32,22 @@ namespace CodeGenarator
 
                 clsHelper.GenerateArchitectureSolution(_projectDirectory, sn);
             }
-            bool more = false;
-            do
+            // fetching all tables from the database using clsHelper.GetAllTables()
+            List<string> databaseTables = clsHelper.GetAllTables();
+
+            AnsiConsole.MarkupLine($"[cyan]Found {databaseTables.Count} tables in the database.[/]\n");
+
+            foreach (string tName in databaseTables)
             {
-                await Run();
-                Console.Write("\nDo you want to generate code for another table? (yes/no): ");
-                answer = Console.ReadLine();
-                if (answer.ToLower() == "yes" || answer.ToLower() == "y")
+                if (AnsiConsole.Confirm($"Do you want to generate code for table [green]{tName}[/]?"))
                 {
-                    more = true;
+                    await Run(tName);
                     Console.Clear();
-                    AnsiConsole.Write(
-                                    new FigletText("ADO Gen Code")
-                                        .Centered()
-                                        .Color(Color.Green));
-                    AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator[/]").Justify(Justify.Left));
-                    AnsiConsole.MarkupLine("[grey]This tool generates DAL and BLL CRUD ADO.NET for you.[/]");
-                    AnsiConsole.MarkupLine("[red]Notice:[/] Please ensure database settings are configured in [cyan]clsHelper.connectionString[/].\n");
+                    AnsiConsole.Write(new FigletText("ADO Gen Code").Centered().Color(Color.Green));
                 }
-                else
-                {
-                    more = false;
-                }
-            } while (more);
+            }
+
+            // بس يخلص المسح لكل الجداول، بيطلع دغري على سطر الـ Completion والـ Signature Panel تبعك
 
             AnsiConsole.WriteLine();
             Panel signaturePanel = new Panel(
@@ -73,33 +66,38 @@ namespace CodeGenarator
             AnsiConsole.MarkupLine("\n[grey]Press any key to exit...[/]");
             Console.ReadKey();
         }
+        static bool isUserTable = false;
 
-        public static async Task Run()
+        public static async Task Run(string tableName)
         {
-            Console.Write("Enter Table Name: ");
-            clsHelper.tableName = Console.ReadLine();
-            int count = 0;
-            do
+            clsHelper.tableName = tableName;
+            clsHelper.Columns = clsHelper.getColumnsNameAndType();
+            int count = clsHelper.Columns.Count;
+
+            if (count == 0)
             {
-                clsHelper.Columns = clsHelper.getColumnsNameAndType();
-                if (clsHelper.Columns.Count == 0)
-                {
-                    Console.WriteLine("No Columns Found, Please Enter a Valid Table Name: ");
-                    clsHelper.tableName = Console.ReadLine();
-                }
-                else
-                {
-                    count = clsHelper.Columns.Count;
-                }
-
-            } while (count == 0);
-
-            Console.Write("Enter The Class Name For Both DAL And BLL (cls First will be added on it): ");
-            clsHelper.objectName = Console.ReadLine();
-            string answer = "yes";
+                AnsiConsole.MarkupLine($"[red]No Columns Found for table {tableName}, skipping...[/]");
+                return;
+            }
             StringBuilder DALFuncs = new StringBuilder();
             StringBuilder BLLFuncs = new StringBuilder();
             StringBuilder Controller = new StringBuilder();
+
+            isUserTable = (tableName.ToLower() == "user" || tableName.ToLower() == "users");
+
+            if (isUserTable)
+            {
+                AnsiConsole.MarkupLine("[yellow]-> Detecting User Table! Generating JWT Authentication Logic...[/]");
+
+                clsHelper.allSPs.Add(clsSPs.loginSP());
+                DALFuncs.Append(clsDAL.getAuthData());
+                BLLFuncs.Append(clsBLL.checkLogin());
+            }
+            Console.Write($"\nEnter The Class Name For {tableName} (cls First will be added on it): ");
+            clsHelper.objectName = Console.ReadLine();
+            clsHelper.className = "cls" + clsHelper.objectName;
+            string answer = "yes";
+            
 
             clsHelper.mappedColumns = clsHelper.mappingTheColumns();
             clsHelper.ColumnsForCsharp = clsHelper.getColumnsForCsharp();
@@ -229,6 +227,7 @@ namespace CodeGenarator
                 string dto = Path.Combine(_projectDirectory, "Shared", "DTOs");
                 string briefDto = Path.Combine(dto, "Brief");
                 string fullDto = Path.Combine(dto, "Full");
+                string authDto = Path.Combine(dto, "Auth");
                 string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
 
                 if (!Directory.Exists(dal)) Directory.CreateDirectory(dal);
@@ -236,6 +235,10 @@ namespace CodeGenarator
                 if (!Directory.Exists(dto)) Directory.CreateDirectory(dto);
                 if (!Directory.Exists(briefDto)) Directory.CreateDirectory(briefDto);
                 if (!Directory.Exists(fullDto)) Directory.CreateDirectory(fullDto);
+                if(isUserTable)
+                {
+                    if (!Directory.Exists(authDto)) Directory.CreateDirectory(authDto);
+                }
                 if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
 
                 // Exact file paths
@@ -243,6 +246,7 @@ namespace CodeGenarator
                 string bllPath = Path.Combine(bll, $"{clsHelper.className}.cs");
                 string BriefDTOPath = Path.Combine(briefDto, $"{clsHelper.className}BriefDTO.cs");
                 string FullDTOPath = Path.Combine(fullDto, $"{clsHelper.className}FullDTO.cs");
+                string AuthDTOPath = Path.Combine(authDto, $"AuthDTO.cs");
                 string controllerPath = Path.Combine(controllersFolder, $"{clsHelper.objectName}Controller.cs");
 
                 // Save files
@@ -277,6 +281,13 @@ namespace CodeGenarator
                 {
                     await writer.WriteAsync(clsAPIs.FullDTO());
                 }
+                if(isUserTable)
+                {
+                    using (StreamWriter writer = new StreamWriter(AuthDTOPath))
+                    {
+                        await writer.WriteAsync(clsAPIs.SecurityDTO());
+                    }
+                }
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making Web API Controller... ");
@@ -288,7 +299,7 @@ namespace CodeGenarator
                 Console.WriteLine("[Done]");
 
                 AnsiConsole.MarkupLine($"\n[green]Success:[/] Files generated and saved successfully!");
-                AnsiConsole.MarkupLine($"[grey]Stored Procedures:[/] [cyan]{spPath}[/]");
+                AnsiConsole.MarkupLine($"[grey]Stored Procedures:[/] [bold green]Injected Directly into DB![/]");
                 AnsiConsole.MarkupLine($"[grey]DAL Class:[/] [cyan]{dalPath}[/]");
                 AnsiConsole.MarkupLine($"[grey]BLL Class:[/] [cyan]{bllPath}[/]");
                 AnsiConsole.MarkupLine($"[grey]Web API Controller:[/] [cyan]{controllerPath}[/]");

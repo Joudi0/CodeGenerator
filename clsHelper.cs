@@ -14,8 +14,7 @@ namespace CodeGenarator
         public static string tableName = "";
         public struct Column { public string name; public string type; public string isNullable; public bool composition; };
         public static string objectName = "";
-        public static string className => "cls" + objectName;
-
+        public static string className = "";
         public static List<Column> Columns;
         public static List<Column> mappedColumns;
         public static List<Column> ColumnsForCsharp;
@@ -291,6 +290,38 @@ app.MapControllers();
 
 app.Run();";
             File.WriteAllText(programCsPath, cleanProgramCode);
+
+            // Adding clsSecurityHelper to Shared project
+            string securityHelperPath = Path.Combine(sharedFolder, "clsSecurityHelper.cs");
+            string securityHelperCode = @"using System;
+using System.Security.Cryptography;
+
+namespace Shared
+{
+    public static class clsSecurityHelper
+    {
+        public static string ComputeHash(string password, string salt, int iterations = 10000)
+        {
+            byte[] saltBytes = Convert.FromBase64String(salt);
+            using (var pbkdf2 = new Rfc2898DeriveBytes(password, saltBytes, iterations, HashAlgorithmName.SHA256))
+            {
+                byte[] hashBytes = pbkdf2.GetBytes(32);
+                return Convert.ToBase64String(hashBytes);
+            }
+        }
+
+        public static string GenerateSalt(int size = 16)
+        {
+            byte[] saltBytes = new byte[size];
+            using (var provider = RandomNumberGenerator.Create())
+            {
+                provider.GetBytes(saltBytes);
+            }
+            return Convert.ToBase64String(saltBytes);
+        }
+    }
+}";
+            File.WriteAllText(securityHelperPath, securityHelperCode);
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
@@ -342,6 +373,29 @@ app.Run();";
                 }
             }
             allSPs.Clear();
+        }
+
+        public static List<string> GetAllTables()
+        {
+            List<string> tableNames = new List<string>();
+            string connectionString = ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString;
+
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                string query = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'";
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    conn.Open();
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            tableNames.Add(reader["TABLE_NAME"].ToString());
+                        }
+                    }
+                }
+            }
+            return tableNames;
         }
 
         public static void debugThing(object obj)

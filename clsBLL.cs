@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Security.AccessControl;
 using System.Text;
 
 namespace CodeGenarator
@@ -26,6 +27,24 @@ namespace CodeGenarator
         }
 
         // Actual Functions:
+        public static string checkLogin()
+        {
+            string Function = $@"
+        public static async Task<bool> checkLogin(string Username, string Password)
+        {{
+            // 1. getting the Hash and Salt from the database for the given username
+            AuthDTO authData = await {clsHelper.className}DAL.getHashAndSalt(Username);
+
+            if (authData == null) return false;
+
+            // 2. generating the hash from the provided password and the salt retrieved from the database
+            string generatedHash = clsSecurityHelper.ComputeHash(Password, authData.PasswordSalt);
+            // 3. comparing the generated hash with the stored hash
+            return (generatedHash == authData.PasswordHash);
+        }}";
+
+            return Function;
+        }
 
         public static string isExistsFunc(clsHelper.Column C)
         {

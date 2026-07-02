@@ -219,6 +219,18 @@ namespace CodeGenarator
         }
 
 
-
+        public static string loginSP()
+        {
+            // Assuming the table has columns for Username, PasswordHash, and PasswordSalt
+            string SP = $@"
+    CREATE PROCEDURE [dbo].[SP_{clsHelper.tableName}_GetSecurityDataByUsername]
+            @Username NVARCHAR(150)
+    AS
+    BEGIN
+        SELECT PasswordHash, PasswordSalt FROM {clsHelper.tableName} WHERE Username = @Username;
+    END
+    ";
+            return SP;
+        }
     }
 }

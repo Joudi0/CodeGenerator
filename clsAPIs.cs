@@ -70,6 +70,23 @@ namespace Shared
             return DTO;
         }
 
+        public static string SecurityDTO()
+        {
+            string DTO = $@"
+using System;
+
+namespace Shared.DTOs.Auth
+{{
+    public class {clsHelper.className}SecurityDTO
+    {{
+        public string PasswordHash {{ get; set; }}
+        public string PasswordSalt {{ get; set; }}
+    }}
+}}
+";
+            return DTO;
+        }
+
         // ==========================================
         //  Web API Controllers
         // ==========================================

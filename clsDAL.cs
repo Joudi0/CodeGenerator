@@ -47,34 +47,74 @@ namespace CodeGenarator
             string script = "";
             string tabs = "                    ";
 
-            foreach (var col in clsHelper.getColumnsForCsharp())
+            foreach (clsHelper.Column col in clsHelper.getColumnsForCsharp())
             {
-                if (col.isNullable == "NO")
-                {
-                    script += $"{tabs}{col.name} = ({col.type})reader[\"{col.name}\"],\n";
-                }
-                else if (col.isNullable == "YES")
-                {
-                    switch (col.type)
-                    {
-                        case "byte": script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? (byte)0 : ({col.type})reader[\"{col.name}\"],\n"; break;
-                        case "decimal":
-                        case "int":
-                            script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? -1 : ({col.type})reader[\"{col.name}\"],\n"; break;
-                        case "string":
-                            script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? \"\" : ({col.type})reader[\"{col.name}\"],\n"; break;
-                        case "DateTime":
-                            script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? DateTime.Now : ({col.type})reader[\"{col.name}\"],\n"; break;
-                        case "bool": script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? false : ({col.type})reader[\"{col.name}\"],\n"; break;
-                        default: script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? null : ({col.type})reader[\"{col.name}\"],\n"; break;
-                    }
-                }
+                script += generateProprety(col);
             }
             return script.TrimEnd('\n', ',');
         }
 
-        // Actual Functions
+        public static string generateProprety(clsHelper.Column col)
+        {
+            string script = "";
+            if (col.isNullable == "NO")
+            {
+                script += $"{tabs}{col.name} = ({col.type})reader[\"{col.name}\"],\n";
+            }
+            else if (col.isNullable == "YES")
+            {
+                switch (col.type)
+                {
+                    case "byte": script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? (byte)0 : ({col.type})reader[\"{col.name}\"],\n"; break;
+                    case "decimal":
+                    case "int":
+                        script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? -1 : ({col.type})reader[\"{col.name}\"],\n"; break;
+                    case "string":
+                        script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? \"\" : ({col.type})reader[\"{col.name}\"],\n"; break;
+                    case "DateTime":
+                        script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? DateTime.Now : ({col.type})reader[\"{col.name}\"],\n"; break;
+                    case "bool": script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? false : ({col.type})reader[\"{col.name}\"],\n"; break;
+                    default: script += $"{tabs}{col.name} = (reader[\"{col.name}\"] == DBNull.Value) ? null : ({col.type})reader[\"{col.name}\"],\n"; break;
+                }
+            }
+            return script;
+        }
 
+        // Actual Functions
+        public static string getAuthData()
+        {
+            clsHelper.Column hash = clsHelper.Columns.Find(c => c.name.ToLower().Contains("hash"));
+            clsHelper.Column salt = clsHelper.Columns.Find(c => c.name.ToLower().Contains("salt"));
+
+            if (hash == null || salt == null) return "// Warning: PasswordHash or PasswordSalt columns not found!";
+
+            string Function = $@"
+        public static async Task<AuthDTO> getHashAndSalt(string Username)
+        {{
+            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlCommand command = new SqlCommand(""SP_{tableName}_GetSecurityDataByUsername"", connection);
+            command.CommandType = CommandType.StoredProcedure;
+            command.Parameters.AddWithValue(""@Username"", Username);
+            try
+            {{
+                await connection.OpenAsync();
+                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {{
+                    return new AuthDTO
+                    {{
+                        // Property names are hardcoded, database column names are dynamically retrieved
+                        PasswordHash = (reader[""{hash.name}""] == DBNull.Value) ? """" : (string)reader[""{hash.name}""],
+                        PasswordSalt = (reader[""{salt.name}""] == DBNull.Value) ? """" : (string)reader[""{salt.name}""]
+                    }};
+                }}
+            }}
+            catch (Exception) {{ throw; }}
+
+            return null;
+        }}";
+            return Function;
+        }
         public static string getRecordByColumnFunc(Column C)
         {
             if (Columns.Count == 0) return "Error in the lists";
