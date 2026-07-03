@@ -30,17 +30,24 @@ namespace CodeGenarator
         public static string checkLogin()
         {
             string Function = $@"
-        public static async Task<bool> checkLogin(string Username, string Password)
+        public static async Task<int?> checkLogin(string Username, string Password)
         {{
             // 1. getting the Hash and Salt from the database for the given username
             AuthDTO authData = await {clsHelper.className}DAL.getHashAndSalt(Username);
 
-            if (authData == null) return false;
+            if (authData == null) return null;
 
             // 2. generating the hash from the provided password and the salt retrieved from the database
             string generatedHash = clsSecurityHelper.ComputeHash(Password, authData.PasswordSalt);
             // 3. comparing the generated hash with the stored hash
-            return (generatedHash == authData.PasswordHash);
+            if (generatedHash == authData.PasswordHash) 
+            {{
+                return authData.ID; // 4. returning the ID if the hashes match
+            }}
+            else
+            {{
+                return null; // 5. returning null if the hashes don't match
+            }}
         }}";
 
             return Function;
@@ -70,6 +77,48 @@ namespace CodeGenarator
             return fullDto;
         }}
 ";
+        }
+
+        public static string registerUser()
+        {
+            StringBuilder fieldsMapping = new StringBuilder();
+            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.ColumnsForCsharp);
+            fieldsMapping.AppendLine($"            {columns[0].name} = -1,");
+            columns.RemoveAt(0); // Remove the first column (ID) since it's auto-generated
+
+            foreach (var col in columns)
+            {
+                if (col.name.ToLower().Contains("hash"))
+                {
+                    fieldsMapping.AppendLine($"            {col.name} = hash,");
+                    continue;
+                }
+                if (col.name.ToLower().Contains("salt"))
+                {
+                    fieldsMapping.AppendLine($"            {col.name} = salt,");
+                    continue;
+                }
+
+                // Map all other database columns directly from the incoming request DTO
+                fieldsMapping.AppendLine($"            {col.name} = registerDto.{col.name},");
+            }
+
+            return $@"
+    public static async Task<int> RegisterUser(Shared.RegisterRequestDTO registerDto)
+    {{
+        if (registerDto == null || string.IsNullOrEmpty(registerDto.Password))
+            throw new ArgumentException(""Password is required for registration."");
+
+        string salt = clsSecurityHelper.GenerateSalt();
+        string hash = clsSecurityHelper.ComputeHash(registerDto.Password, salt);
+
+        var fullDto = new {clsHelper.className}FullDTO
+        {{
+{fieldsMapping}
+        }};
+
+        return await {clsHelper.className}DAL.add{clsHelper.objectName}(fullDto);
+    }}";
         }
 
         public static string addFunc()

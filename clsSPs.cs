@@ -227,7 +227,7 @@ namespace CodeGenarator
             @Username NVARCHAR(150)
     AS
     BEGIN
-        SELECT PasswordHash, PasswordSalt FROM {clsHelper.tableName} WHERE Username = @Username;
+        SELECT UserID, PasswordHash, PasswordSalt FROM {clsHelper.tableName} WHERE Username = @Username;
     END
     ";
             return SP;

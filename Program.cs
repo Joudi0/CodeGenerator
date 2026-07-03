@@ -373,6 +373,24 @@ namespace WebAPI.Services
             {
                 await writer.WriteAsync(clsAPIs.SecurityDTO());
             }
+
+            // Adding RegisterRequestDTO to Shared/DTOs/Auth folder
+            string RegisterRequestDTOPath = Path.Combine(authDto, $"RegisterRequestDTO.cs");
+            using (StreamWriter writer = new StreamWriter(RegisterRequestDTOPath))
+            {
+                await writer.WriteAsync(clsAPIs.RegisterRequestDTO());
+            }
+
+            string loginRequestDTOPath = Path.Combine(authDto, "LoginRequestDTO.cs");
+            string loginRequestDTOCode = @"namespace Shared
+{
+    public class LoginRequestDTO
+    {
+        public string Username { get; set; }
+        public string Password { get; set; }
+    }
+}";
+            File.WriteAllText(loginRequestDTOPath, loginRequestDTOCode);
         }
     }
 }

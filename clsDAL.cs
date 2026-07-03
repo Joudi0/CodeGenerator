@@ -85,8 +85,7 @@ namespace CodeGenarator
         {
             clsHelper.Column hash = clsHelper.Columns.Find(c => c.name.ToLower().Contains("hash"));
             clsHelper.Column salt = clsHelper.Columns.Find(c => c.name.ToLower().Contains("salt"));
-
-            if (hash == null || salt == null) return "// Warning: PasswordHash or PasswordSalt columns not found!";
+            clsHelper.Column userID = clsHelper.Columns.Find(c => c.name.ToLower().Contains("userid"));
 
             string Function = $@"
         public static async Task<AuthDTO> getHashAndSalt(string Username)
@@ -104,6 +103,7 @@ namespace CodeGenarator
                     return new AuthDTO
                     {{
                         // Property names are hardcoded, database column names are dynamically retrieved
+                        UserID = (reader[""{userID.name}""] == DBNull.Value) ? 0 : (int)reader[""{userID.name}""],
                         PasswordHash = (reader[""{hash.name}""] == DBNull.Value) ? """" : (string)reader[""{hash.name}""],
                         PasswordSalt = (reader[""{salt.name}""] == DBNull.Value) ? """" : (string)reader[""{salt.name}""]
                     }};
@@ -115,6 +115,7 @@ namespace CodeGenarator
         }}";
             return Function;
         }
+
         public static string getRecordByColumnFunc(Column C)
         {
             if (Columns.Count == 0) return "Error in the lists";
@@ -171,7 +172,7 @@ namespace CodeGenarator
 
         public static string addFunc()
         {
-            if (Columns.Count == 0) return "Error in the lists";
+            if (Columns.Count == 0) return "// There is no Columns to work on!";
             string Function = $@"
         public static async Task<int> add{objectName}({clsHelper.className}FullDTO dto)
         {{
