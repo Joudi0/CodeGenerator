@@ -261,13 +261,13 @@ namespace CodeGenerator
             // Uppdating Program.cs File
             string programCsPath = Path.Combine(targetDirectory, "WebAPI", "Program.cs");
 
-            string cleanProgramCode = @"
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+            string cleanProgramCode = @"using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
+
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
-// Remember to Add needed CORS And Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -285,30 +285,49 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition(""Bearer"", new OpenApiSecurityScheme
+    {
+        Name = ""Authorization"",
+        Type = SecuritySchemeType.Http,
+        Scheme = ""Bearer"",
+        BearerFormat = ""JWT"",
+        In = ParameterLocation.Header,
+        Description = ""Enter: Bearer {your JWT token}""
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = ""Bearer""
+                }
+            },
+            new string[] {}
+        }
+    });
+});
 
 builder.Services.AddAuthorization();
-
 builder.Services.AddControllers(); 
 
 var app = builder.Build();
 
-// Enable Swagger only in development environment.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Forcing HTTPS
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
-
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();";
             File.WriteAllText(programCsPath, cleanProgramCode);
             TrackLines(cleanProgramCode);
