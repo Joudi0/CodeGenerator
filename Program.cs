@@ -111,6 +111,7 @@ namespace CodeGenarator
                 clsHelper.allSPs.Add(clsSPs.selectByColumnSP(column));
                 DALFuncs.Append(clsDAL.getRecordByColumnFunc(column));
                 BLLFuncs.Append(clsBLL.getByFunc(column));
+                BLLFuncs.Append(clsBLL.getBriefFunc(column));
                 Controller.Append(clsAPIs.getByAction(column));
             }
 

@@ -121,10 +121,6 @@ namespace CodeGenarator
                     string answer = Console.ReadLine();
                     if (answer != null && (answer.ToLower() == "yes" || answer.ToLower() == "y"))
                     {
-                        string cleanName = c.name.Substring(0, c.name.Length - 2);
-                        cleanName = "cls" + char.ToUpper(cleanName[0]) + cleanName.Substring(1);
-
-                        c.type = cleanName; // Update the type to composition
                         c.composition = true;
                     }
                 }
@@ -274,7 +270,6 @@ namespace WebAPI.Controllers
     }
 }";
             File.WriteAllText(authControllerPath, authControllerCode);
-            TrackLines(authControllerCode);
 
             // Uppdating Program.cs File
             string programCsPath = Path.Combine(targetDirectory, "WebAPI", "Program.cs");
@@ -330,7 +325,27 @@ namespace Shared
             File.WriteAllText(securityHelperPath, securityHelperCode);
             TrackLines(securityHelperCode);
 
-
+            string appSettingsPath = Path.Combine(targetDirectory, "WebAPI", "appsettings.json");
+            string appSettingsCode = @"{
+  ""Logging"": {
+    ""LogLevel"": {
+      ""Default"": ""Information"",
+      ""Microsoft.AspNetCore"": ""Warning""
+    }
+  },
+  ""AllowedHosts"": ""*"",
+  ""ConnectionStrings"": {
+    ""DefaultConnection"": """ + ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString + @"""
+  },
+  ""JwtSettings"": {
+    ""SecretKey"": ""Your_Super_Secret_Key_That_Is_Long_Enough_To_Satisfy_Sha256_For_Jwt_Signing!"",
+    ""Issuer"": ""DVLD_API"",
+    ""Audience"": ""DVLD_Users"",
+    ""ExpirationInHours"": ""2""
+  }
+}";
+            File.WriteAllText(appSettingsPath, appSettingsCode);
+            TrackLines(appSettingsCode);
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
@@ -373,6 +388,10 @@ namespace Shared
 
                         transaction.Commit();
                         Console.WriteLine("All Stored Procedures are injected in the database successfully!.");
+                        foreach (string spCode in allSPs)
+                        {
+                            TrackLines(spCode);
+                        }
                     }
                     catch (Exception ex)
                     {

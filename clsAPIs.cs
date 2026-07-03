@@ -12,25 +12,38 @@ namespace CodeGenarator
 
         public static string writeProperties(bool full = false)
         {
-            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.getColumnsForCsharp());
+            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.mappedColumns);
             string Properties = "";
-            if (full)
-            {
-                foreach (clsHelper.Column c in columns)
-                {
-                    Properties += $@"{tabs}public {c.type} {c.name} {{ get; set; }}" + "\n";
-                }
-            }
-            else
+
+            // Apply blacklist filter only if it's a Brief DTO
+            if (!full)
             {
                 columns.RemoveAll(c => blackList.Contains(c.name.ToLower()));
-                foreach (clsHelper.Column c in columns)
+            }
+
+            foreach (clsHelper.Column col in columns)
+            {
+                if (col.composition)
                 {
-                    Properties += $@"{tabs}public {c.type} {c.name} {{ get; set; }}" + "\n";
+                    // 1. Keep the primitive ID for database and DAL operations (Fixed Newline)
+                    Properties += $"{tabs}public {col.type} {col.name} {{ get; set; }}\n";
+
+                    // 2. Dynamically construct and append the clean Nested Brief DTO property (Fixed Newline)
+                    string cleanName = col.name.Substring(0, col.name.Length - 2);
+                    string dtoType = "cls" + char.ToUpper(cleanName[0]) + cleanName.Substring(1) + "BriefDTO";
+                    string propName = char.ToUpper(cleanName[0]) + cleanName.Substring(1) + "Details";
+
+                    Properties += $"{tabs}public {dtoType} {propName} {{ get; set; }}\n";
+                }
+                else
+                {
+                    // Normal database column mapping
+                    Properties += $"{tabs}public {col.type} {col.name} {{ get; set; }}\n";
                 }
             }
             return Properties;
         }
+
 
         public static List<string> blackList = new List<string> { "password",
         "ip", "secret", "salary", "balance", "privatekey",

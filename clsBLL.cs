@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Security.AccessControl;
 using System.Text;
+using static CodeGenarator.clsHelper;
 
 namespace CodeGenarator
 {
@@ -21,7 +21,19 @@ namespace CodeGenarator
 
             foreach (clsHelper.Column col in briefColumns)
             {
-                script += $"{indent}{col.name} = {sourcePrefix}{col.name},\n";
+                if (col.composition)
+                {
+                    script += $"{indent}{col.name} = {sourcePrefix}{col.name},\n";
+
+                    string cleanName = col.name.Substring(0, col.name.Length - 2);
+                    string propName = char.ToUpper(cleanName[0]) + cleanName.Substring(1) + "Details";
+
+                    script += $"{indent}{propName} = {sourcePrefix}{propName},\n";
+                }
+                else
+                {
+                    script += $"{indent}{col.name} = {sourcePrefix}{col.name},\n";
+                }
             }
             return script.TrimEnd('\n', ',');
         }
@@ -32,21 +44,22 @@ namespace CodeGenarator
             string Function = $@"
         public static async Task<int?> checkLogin(string Username, string Password)
         {{
-            // 1. getting the Hash and Salt from the database for the given username
+            // 1. Retrieve cryptographic security data from the database
             AuthDTO authData = await {clsHelper.className}DAL.getHashAndSalt(Username);
 
             if (authData == null) return null;
 
-            // 2. generating the hash from the provided password and the salt retrieved from the database
+            // 2. Compute the hash using the provided password and the retrieved salt
             string generatedHash = clsSecurityHelper.ComputeHash(Password, authData.PasswordSalt);
-            // 3. comparing the generated hash with the stored hash
+            
+            // 3. Verify if the computed hash matches the stored password hash
             if (generatedHash == authData.PasswordHash) 
             {{
-                return authData.ID; // 4. returning the ID if the hashes match
+                return authData.UserID; // Fixed property name from ID to UserID
             }}
             else
             {{
-                return null; // 5. returning null if the hashes don't match
+                return null; 
             }}
         }}";
 
@@ -63,17 +76,56 @@ namespace CodeGenarator
 ";
         }
 
+        public static string getBriefFunc(clsHelper.Column C)
+        {
+            int columnIndex = clsHelper.getColumnIndex(C.name);
+            string functionName = (columnIndex == 0) ? $"get{clsHelper.objectName}BriefByID" : $"get{clsHelper.objectName}BriefBy{C.name}";
+            string dalFunctionName = (columnIndex == 0) ? $"get{clsHelper.objectName}ByID" : $"get{clsHelper.objectName}By{C.name}";
+
+            return $@"
+        public static async Task<{clsHelper.className}BriefDTO> {functionName}({C.type} {C.name})
+        {{
+            // Fetch the full flat record from DAL
+            var fullDto = await {DALName}.{dalFunctionName}({C.name});
+            if (fullDto == null) return null;
+
+            // Map it instantly in memory to BriefDTO
+            return new {clsHelper.className}BriefDTO
+            {{
+{generateBriefMapping("fullDto.")}
+            }};
+        }}";
+        }
+
         public static string getByFunc(clsHelper.Column C)
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);
             string functionName = (columnIndex == 0) ? $"get{clsHelper.objectName}ByID" : $"get{clsHelper.objectName}By{C.name}";
+
+            StringBuilder compositionPopulation = new StringBuilder();
+            foreach (var col in clsHelper.mappedColumns)
+            {
+                if (col.composition)
+                {
+                    string cleanName = col.name.Substring(0, col.name.Length - 2);
+                    string targetBLL = "cls" + char.ToUpper(cleanName[0]) + cleanName.Substring(1);
+                    string propName = char.ToUpper(cleanName[0]) + cleanName.Substring(1) + "Details";
+
+                    compositionPopulation.AppendLine();
+                    compositionPopulation.AppendLine($"            // Directly populate nested object using the single Brief method");
+                    compositionPopulation.AppendLine($"            if (fullDto.{col.name} != default)");
+                    compositionPopulation.AppendLine($"            {{");
+                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{char.ToUpper(cleanName[0])}{cleanName.Substring(1)}BriefByID(fullDto.{col.name});");
+                    compositionPopulation.AppendLine($"            }}");
+                }
+            }
 
             return $@"
         public static async Task<{clsHelper.className}FullDTO> {functionName}({C.type} {C.name})
         {{
             {clsHelper.className}FullDTO fullDto = await {DALName}.{functionName}({C.name});
             if (fullDto == null) return null;
-
+{compositionPopulation}
             return fullDto;
         }}
 ";
@@ -84,7 +136,7 @@ namespace CodeGenarator
             StringBuilder fieldsMapping = new StringBuilder();
             List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.ColumnsForCsharp);
             fieldsMapping.AppendLine($"            {columns[0].name} = -1,");
-            columns.RemoveAt(0); // Remove the first column (ID) since it's auto-generated
+            columns.RemoveAt(0);
 
             foreach (var col in columns)
             {
@@ -99,7 +151,6 @@ namespace CodeGenarator
                     continue;
                 }
 
-                // Map all other database columns directly from the incoming request DTO
                 fieldsMapping.AppendLine($"            {col.name} = registerDto.{col.name},");
             }
 
@@ -190,14 +241,12 @@ namespace CodeGenarator
         {{
             if (await {existFuncName}({C.name}))
             {{
-                //  Fetching the full list from DAL
                 List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({C.name});
                 List<{clsHelper.className}BriefDTO> briefList = new List<{clsHelper.className}BriefDTO>();
                 
-                // looping through the full list and mapping to brief DTO
                 foreach ({clsHelper.className}FullDTO item in fullList)
                 {{
-                    briefList.Add(new {clsHelper.className}BriefDTO)
+                    briefList.Add(new {clsHelper.className}BriefDTO
                     {{
 {generateBriefMapping("item.")}
                     }});
