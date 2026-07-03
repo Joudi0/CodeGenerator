@@ -18,6 +18,7 @@ namespace CodeGenarator
         public static List<Column> Columns;
         public static List<Column> mappedColumns;
         public static List<Column> ColumnsForCsharp;
+        public static int TotalLinesGenerated = 0;
 
         public static Column makeMappedColumnByName(string name)
         {
@@ -273,6 +274,7 @@ namespace WebAPI.Controllers
     }
 }";
             File.WriteAllText(authControllerPath, authControllerCode);
+            TrackLines(authControllerCode);
 
             // Uppdating Program.cs File
             string programCsPath = Path.Combine(targetDirectory, "WebAPI", "Program.cs");
@@ -293,6 +295,7 @@ app.MapControllers();
 
 app.Run();";
             File.WriteAllText(programCsPath, cleanProgramCode);
+            TrackLines(cleanProgramCode);
 
             // Adding clsSecurityHelper to Shared project
             string securityHelperPath = Path.Combine(sharedFolder, "clsSecurityHelper.cs");
@@ -325,8 +328,8 @@ namespace Shared
     }
 }";
             File.WriteAllText(securityHelperPath, securityHelperCode);
+            TrackLines(securityHelperCode);
 
-            
 
         }
 
@@ -379,6 +382,14 @@ namespace Shared
                 }
             }
             allSPs.Clear();
+        }
+
+        public static void TrackLines(string code)
+        {
+            if (!string.IsNullOrEmpty(code))
+            {
+                TotalLinesGenerated += code.Split('\n').Length;
+            }
         }
 
         public static List<string> GetAllTables()

@@ -12,7 +12,7 @@ namespace CodeGenarator
     internal class Program
     {
         private static string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
-
+        // The global dopamine counter!
         static async Task Main(string[] args)
         {
             AnsiConsole.Write(
@@ -47,11 +47,11 @@ namespace CodeGenarator
                 }
             }
 
-            // بس يخلص المسح لكل الجداول، بيطلع دغري على سطر الـ Completion والـ Signature Panel تبعك
-
+            // Finished generating code for all tables
             AnsiConsole.WriteLine();
             Panel signaturePanel = new Panel(
                 new Markup(
+                    $"[bold gold1]🚀 Total Code Generated:[/] [bold green]{TotalLinesGenerated:N0} lines of clean code![/]\n\n" +
                     "[bold white]Developed with ❤️ by:[/] [bold green]Joudi[/]\n" +
                     "[bold white]Telegram:[/] [blue]@Joudi_Adeeb[/]\n" +
                     "[bold white]LinkedIn:[/] [blue]linkedin.com/in/joudi-mohammad-002685283[/]"
@@ -92,7 +92,6 @@ namespace CodeGenarator
                 clsHelper.allSPs.Add(clsSPs.loginSP());
                 DALFuncs.Append(clsDAL.getAuthData());
                 BLLFuncs.Append(clsBLL.checkLogin());
-                Controller.Append(clsAPIs.loginAction());
             }
             Console.Write($"\nEnter The Class Name For {tableName} (cls First will be added on it): ");
             clsHelper.objectName = Console.ReadLine();
@@ -214,6 +213,7 @@ namespace CodeGenarator
 
             await saveFilesAsync(DALFuncs, BLLFuncs, Controller);
         }
+
         public static async Task saveFilesAsync(StringBuilder DALFuncs, StringBuilder BLLFuncs, StringBuilder Controller)
         {
             try
@@ -254,37 +254,49 @@ namespace CodeGenarator
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making DAL Class... ");
+                string dalCode = clsDAL.classStructure(DALFuncs);
                 using (StreamWriter writer = new StreamWriter(dalPath))
                 {
-                    await writer.WriteAsync(clsDAL.classStructure(DALFuncs));
+                    await writer.WriteAsync(dalCode);
                 }
+                TrackLines(dalCode); // Catch and count!
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making BLL Class... ");
+                string bllCode = clsBLL.classStructure(BLLFuncs);
                 using (StreamWriter writer = new StreamWriter(bllPath))
                 {
-                    await writer.WriteAsync(clsBLL.classStructure(BLLFuncs));
+                    await writer.WriteAsync(bllCode);
                 }
+                TrackLines(bllCode); // Catch and count!
+
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making DTO Class... ");
+                string BriefDTOCode = clsAPIs.BriefDTO();
                 using (StreamWriter writer = new StreamWriter(BriefDTOPath))
                 {
-                    await writer.WriteAsync(clsAPIs.BriefDTO());
+                    await writer.WriteAsync(BriefDTOCode);
                 }
+
+                string FullDTOCode = clsAPIs.FullDTO();
                 using (StreamWriter writer = new StreamWriter(FullDTOPath))
                 {
-                    await writer.WriteAsync(clsAPIs.FullDTO());
+                    await writer.WriteAsync(FullDTOCode);
                 }
-                
+
+                TrackLines(BriefDTOCode); // Catch and count!
+                TrackLines(FullDTOCode); // Catch and count!
+
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making Web API Controller... ");
-                await Task.Delay(1000);
+                string controllerCode = clsAPIs.controllerStructure(Controller);
                 using (StreamWriter writer = new StreamWriter(controllerPath))
                 {
-                    await writer.WriteAsync(clsAPIs.controllerStructure(Controller));
+                    await writer.WriteAsync(controllerCode);
                 }
+                TrackLines(controllerCode); // Catch and count!
                 Console.WriteLine("[Done]");
 
                 AnsiConsole.MarkupLine($"\n[green]Success:[/] Files generated and saved successfully!");
@@ -302,13 +314,12 @@ namespace CodeGenarator
 
         public static async Task Auth()
         {
-            // Adding clsTokenService to Shared project
+            // 1. Adding clsTokenService to WebAPI project
             string webApiServicesFolder = Path.Combine(_projectDirectory, "WebAPI", "Services");
             if (!Directory.Exists(webApiServicesFolder)) Directory.CreateDirectory(webApiServicesFolder);
 
             string clsTokenServicePath = Path.Combine(webApiServicesFolder, "clsTokenService.cs");
-            string clsTokenService = @"
-using System;
+            string clsTokenService = @"using System;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -321,7 +332,6 @@ namespace WebAPI.Services
     {
         private readonly IConfiguration _configuration;
         
-        // Constructor to inject IConfiguration
         public clsTokenService(IConfiguration configuration)
         {
             _configuration = configuration;
@@ -329,26 +339,22 @@ namespace WebAPI.Services
 
         public string GenerateJWTToken(string username, int userId)
         {
-            // 1. Reading JWT settings from configuration
             var jwtSettings = _configuration.GetSection(""JwtSettings"");
             var secretKey = jwtSettings[""SecretKey""];
             var issuer = jwtSettings[""Issuer""];
             var audience = jwtSettings[""Audience""];
             var expirationInHours = Convert.ToDouble(jwtSettings[""ExpirationInHours""] ?? ""1"");
 
-            // 2. Claims creation (you can add more claims as needed)
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
                 new Claim(ClaimTypes.Name, username),
-                new Claim(ClaimTypes.Role, ""User"") // additional roles can be added here
+                new Claim(ClaimTypes.Role, ""User"")
             };
 
-            // 3.making the signing key and credentials
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-            // 4. making the token 128 bit
             var token = new JwtSecurityToken(
                 issuer: issuer,
                 audience: audience,
@@ -357,30 +363,35 @@ namespace WebAPI.Services
                 signingCredentials: creds
             );
 
-            // 5. finally, return the token as a string
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
     }
-}
-";
+}";
             File.WriteAllText(clsTokenServicePath, clsTokenService);
+            TrackLines(clsTokenService);
 
-            // Adding AuthDTO to Shared/DTOs/Auth folder
+            // 2. Adding AuthDTO to Shared/DTOs/Auth folder
             string authDto = Path.Combine(_projectDirectory, "Shared", "DTOs", "Auth");
             if (!Directory.Exists(authDto)) Directory.CreateDirectory(authDto);
-            string AuthDTOPath = Path.Combine(authDto, $"AuthDTO.cs");
+
+            string AuthDTOPath = Path.Combine(authDto, "AuthDTO.cs");
+            string AuthDTOCode = clsAPIs.SecurityDTO();
             using (StreamWriter writer = new StreamWriter(AuthDTOPath))
             {
-                await writer.WriteAsync(clsAPIs.SecurityDTO());
+                await writer.WriteAsync(AuthDTOCode);
             }
+            TrackLines(AuthDTOCode);
 
-            // Adding RegisterRequestDTO to Shared/DTOs/Auth folder
-            string RegisterRequestDTOPath = Path.Combine(authDto, $"RegisterRequestDTO.cs");
+            // 3. Adding RegisterRequestDTO to Shared/DTOs/Auth folder
+            string RegisterRequestDTOPath = Path.Combine(authDto, "RegisterRequestDTO.cs");
+            string RegisterRequestDTOCode = clsAPIs.RegisterRequestDTO();
             using (StreamWriter writer = new StreamWriter(RegisterRequestDTOPath))
             {
-                await writer.WriteAsync(clsAPIs.RegisterRequestDTO());
+                await writer.WriteAsync(RegisterRequestDTOCode);
             }
+            TrackLines(RegisterRequestDTOCode);
 
+            // 4. Adding LoginRequestDTO to Shared/DTOs/Auth folder
             string loginRequestDTOPath = Path.Combine(authDto, "LoginRequestDTO.cs");
             string loginRequestDTOCode = @"namespace Shared
 {
@@ -391,6 +402,39 @@ namespace WebAPI.Services
     }
 }";
             File.WriteAllText(loginRequestDTOPath, loginRequestDTOCode);
+            TrackLines(loginRequestDTOCode);
+
+            // 5. Creating the actual AuthController.cs file with dynamic endpoints
+            string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
+            if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
+            string authControllerPath = Path.Combine(controllersFolder, "AuthController.cs");
+
+            // Combine both login and register string builders
+            StringBuilder authActions = new StringBuilder();
+            authActions.Append(clsAPIs.loginAction());
+            authActions.Append(clsAPIs.registerAction());
+
+            string fullAuthControllerCode = $@"using BLL;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
+using System.Threading.Tasks;
+using WebAPI.Services;
+using Shared;
+
+namespace WebAPI.Controllers
+{{
+    [ApiController]
+    [Route(""api/[controller]"")]
+    public class AuthController : ControllerBase
+    {{
+{authActions}
+    }}
+}}";
+
+            File.WriteAllText(authControllerPath, fullAuthControllerCode);
+            TrackLines(fullAuthControllerCode);
         }
+
+
     }
 }
