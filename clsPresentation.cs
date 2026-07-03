@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace CodeGenarator
+namespace CodeGenerator
 {
     internal class clsPresentation
     {

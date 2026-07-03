@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CodeGenarator
+namespace CodeGenerator
 {
     public class clsAPIs
     {
@@ -12,7 +12,9 @@ namespace CodeGenarator
 
         public static string writeProperties(bool full = false)
         {
-            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.mappedColumns);
+            List<clsHelper.Column> columns = full
+        ? new List<clsHelper.Column>(clsHelper.mappedColumns)
+        : new List<clsHelper.Column>(clsHelper.ColumnsForCsharp);
             string Properties = "";
 
             // Apply blacklist filter only if it's a Brief DTO
@@ -148,7 +150,7 @@ namespace Shared
         /// <returns>An IActionResult containing the generated access token.</returns>
         /// <response code=""200"">Returns the secure JWT token upon successful authentication.</response>
         /// <response code=""400"">If the credentials are null or empty.</response>
-        /// <response code=""401"">If the username or password is invalid.<///response>
+        /// <response code=""401"">If the username or password is invalid.</response>
         [HttpPost(""login"")]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]

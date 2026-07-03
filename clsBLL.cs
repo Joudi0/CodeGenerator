@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using static CodeGenarator.clsHelper;
+using static CodeGenerator.clsHelper;
 
-namespace CodeGenarator
+namespace CodeGenerator
 {
     public class clsBLL
     {

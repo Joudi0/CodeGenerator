@@ -5,9 +5,9 @@ using System.Configuration;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using static CodeGenarator.clsHelper;
+using static CodeGenerator.clsHelper;
 
-namespace CodeGenarator
+namespace CodeGenerator
 {
     internal class Program
     {

@@ -7,7 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
-namespace CodeGenarator
+namespace CodeGenerator
 {
     public class clsHelper
     {

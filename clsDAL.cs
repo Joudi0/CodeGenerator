@@ -4,10 +4,10 @@ using System.Linq;
 using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Tasks;
-using static CodeGenarator.clsHelper;
+using static CodeGenerator.clsHelper;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
-namespace CodeGenarator
+namespace CodeGenerator
 {
     public class clsDAL
     {
@@ -45,7 +45,6 @@ namespace CodeGenarator
         public static string generateFullDTOMapping()
         {
             string script = "";
-            string tabs = "                    ";
 
             foreach (clsHelper.Column col in clsHelper.getColumnsForCsharp())
             {
@@ -362,6 +361,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
+using Shared;
 namespace DAL
 {{
     public class cls{objectName}DAL
