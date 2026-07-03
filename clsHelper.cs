@@ -258,32 +258,52 @@ namespace CodeGenerator
             string controllersFolder = Path.Combine(webApiFolder, "Controllers");
             if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
 
-            // Creating AuthController.cs file
-            string authControllerPath = Path.Combine(controllersFolder, "AuthController.cs");
-            string authControllerCode = @"using Microsoft.AspNetCore.Mvc;
-namespace WebAPI.Controllers
-{
-    [ApiController]
-    [Route(""api/[controller]"")]
-    public class AuthController : ControllerBase
-    {
-        // TODO: Add Endpoints for authentication (login, register, etc.)
-    }
-}";
-            File.WriteAllText(authControllerPath, authControllerCode);
-
             // Uppdating Program.cs File
             string programCsPath = Path.Combine(targetDirectory, "WebAPI", "Program.cs");
 
-            string cleanProgramCode = @"WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+            string cleanProgramCode = @"
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Remember to Add needed CORS And Authentication
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration[""JwtSettings:Issuer""],
+            ValidAudience = builder.Configuration[""JwtSettings:Audience""],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration[""JwtSettings:SecretKey""]))
+        };
+    });
+
+builder.Services.AddEndpointsApiExplorer();
+
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddAuthorization();
+
 builder.Services.AddControllers(); 
 
 var app = builder.Build();
 
+// Enable Swagger only in development environment.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
 // Forcing HTTPS
 app.UseHttpsRedirection();
+
+app.UseAuthentication();
 
 app.UseAuthorization();
 
@@ -342,7 +362,7 @@ namespace Shared
     ""SecretKey"": ""Your_Super_Secret_Key_That_Is_Long_Enough_To_Satisfy_Sha256_For_Jwt_Signing!"",
     ""Issuer"": ""DVLD_API"",
     ""Audience"": ""DVLD_Users"",
-    ""ExpirationInHours"": ""2""
+    ""ExpirationInHours"": 1
   }
 }";
             File.WriteAllText(appSettingsPath, appSettingsCode);

@@ -411,11 +411,13 @@ using Microsoft.AspNetCore.Http;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using WebAPI.Services;
+using Microsoft.AspNetCore.Authorization;
 using Shared;
 
 namespace WebAPI.Controllers
 {{
     [ApiController]
+    [Authorize]
     [Route(""api/[controller]"")]
     public class {clsHelper.objectName}Controller : ControllerBase
     {{
