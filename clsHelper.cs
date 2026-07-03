@@ -18,6 +18,7 @@ namespace CodeGenarator
         public static List<Column> Columns;
         public static List<Column> mappedColumns;
         public static List<Column> ColumnsForCsharp;
+        // The global dopamine counter!
         public static int TotalLinesGenerated = 0;
 
         public static Column makeMappedColumnByName(string name)

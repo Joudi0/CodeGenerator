@@ -12,9 +12,9 @@ namespace CodeGenarator
     internal class Program
     {
         private static string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
-        // The global dopamine counter!
         static async Task Main(string[] args)
         {
+            Console.OutputEncoding = Encoding.UTF8;
             AnsiConsole.Write(
                                     new FigletText("ADO Gen Code")
                                         .Centered()
