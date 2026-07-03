@@ -216,7 +216,7 @@ namespace CodeGenarator
             RunDotNetCommand(targetDirectory, "new classlib -n Shared -f net10.0");
             RunDotNetCommand(targetDirectory, "new webapi -n WebAPI -f net10.0"); // PL
 
-            RunDotNetCommand(targetDirectory, $"sln {solutionName}.sln add Shared/Shared.csproj DAL/DAL.csproj BLL/BLL.csproj WebAPI/WebAPI.csproj");
+            RunDotNetCommand(targetDirectory, $"sln {solutionName}.slnx add Shared/Shared.csproj DAL/DAL.csproj BLL/BLL.csproj WebAPI/WebAPI.csproj");
 
             // Main Folders/Libraries
             string dalFolder = Path.Combine(targetDirectory, "DAL");
