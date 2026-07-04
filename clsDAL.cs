@@ -82,9 +82,9 @@ namespace CodeGenerator
         // Actual Functions
         public static string getAuthData()
         {
+            clsHelper.Column userID = clsHelper.Columns.Find(c => c.name.ToLower().Contains("userid"));
             clsHelper.Column hash = clsHelper.Columns.Find(c => c.name.ToLower().Contains("hash"));
             clsHelper.Column salt = clsHelper.Columns.Find(c => c.name.ToLower().Contains("salt"));
-            clsHelper.Column userID = clsHelper.Columns.Find(c => c.name.ToLower().Contains("userid"));
 
             string Function = $@"
         public static async Task<AuthDTO> getHashAndSalt(string Username)
@@ -104,7 +104,8 @@ namespace CodeGenerator
                         // Property names are hardcoded, database column names are dynamically retrieved
                         UserID = (reader[""{userID.name}""] == DBNull.Value) ? 0 : (int)reader[""{userID.name}""],
                         PasswordHash = (reader[""{hash.name}""] == DBNull.Value) ? """" : (string)reader[""{hash.name}""],
-                        PasswordSalt = (reader[""{salt.name}""] == DBNull.Value) ? """" : (string)reader[""{salt.name}""]
+                        PasswordSalt = (reader[""{salt.name}""] == DBNull.Value) ? """" : (string)reader[""{salt.name}""],
+                        RoleName = (reader[""RoleName""] == DBNull.Value) ? """" : (string)reader[""RoleName""]
                     }};
                 }}
             }}

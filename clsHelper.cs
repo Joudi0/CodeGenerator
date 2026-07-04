@@ -12,7 +12,14 @@ namespace CodeGenerator
     public class clsHelper
     {
         public static string tableName = "";
-        public struct Column { public string name; public string type; public string isNullable; public bool composition; };
+        public struct Column
+        {
+            public string name;
+            public string type;
+            public string isNullable;
+            public bool composition;
+            public int? length; // Optional
+        };
         public static string objectName = "";
         public static string className = "";
         public static List<Column> Columns;
@@ -36,7 +43,7 @@ namespace CodeGenerator
             List<Column> columnsList = new List<Column>();
 
             SqlConnection connection = new SqlConnection(ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString);
-            string query = $"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{tableName}' ORDER BY ORDINAL_POSITION;";
+            string query = $"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{tableName}' ORDER BY ORDINAL_POSITION;";
             SqlCommand command = new SqlCommand(query, connection);
 
             try

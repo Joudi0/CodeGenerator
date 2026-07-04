@@ -42,7 +42,7 @@ namespace CodeGenerator
         public static string checkLogin()
         {
             string Function = $@"
-        public static async Task<int?> checkLogin(string Username, string Password)
+        public static async Task<AuthDTO> checkLogin(string Username, string Password)
         {{
             // 1. Retrieve cryptographic security data from the database
             AuthDTO authData = await {clsHelper.className}DAL.getHashAndSalt(Username);
@@ -55,7 +55,7 @@ namespace CodeGenerator
             // 3. Verify if the computed hash matches the stored password hash
             if (generatedHash == authData.PasswordHash) 
             {{
-                return authData.UserID; // Fixed property name from ID to UserID
+                return authData; // Return the AuthDTO object if login is successful to generate the token
             }}
             else
             {{
@@ -148,6 +148,12 @@ namespace CodeGenerator
                 if (col.name.ToLower().Contains("salt"))
                 {
                     fieldsMapping.AppendLine($"            {col.name} = salt,");
+                    continue;
+                }
+
+                if (col.name.ToLower() == "roleid") // Sign up is for users only, so we set the role to User by default
+                {
+                    fieldsMapping.AppendLine($"            {col.name} = (int)Shared.enRoles.User,");
                     continue;
                 }
 

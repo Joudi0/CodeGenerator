@@ -29,9 +29,9 @@ namespace CodeGenerator
             foreach (clsHelper.Column col in cols)
             {
                 if(col.isNullable == "y" || col.isNullable == "Yes" || col.isNullable == "Y" || col.isNullable == "yes")
-                    parameters += $"\t@{col.name} {FormatSqlType(col.type)} = NULL,\n";
+                    parameters += $"\t@{col.name} {FormatSqlType(col)} = NULL,\n";
                 
-                else parameters += $"\t@{col.name} {FormatSqlType(col.type)},\n";
+                else parameters += $"\t@{col.name} {FormatSqlType(col)},\n";
             }
             return parameters.TrimEnd('\n', ',');
         }
@@ -83,13 +83,15 @@ namespace CodeGenerator
             return updateStatement;
         }
 
-        private static string FormatSqlType(string type)
+        private static string FormatSqlType(clsHelper.Column C)
         {
-            string t = type.ToLower();
+            string t = C.type.ToLower();
             if (t.Contains("char") || t.Contains("binary"))
-                return type + "(MAX)";
-
-            return type;
+            {
+                string len = (C.length == -1) ? "MAX" : C.length.ToString();
+                return C.type + $"({len})";
+            }
+            return C.type;
         }
         // Acutal Functions:
 
@@ -227,7 +229,7 @@ namespace CodeGenerator
             @Username NVARCHAR(150)
     AS
     BEGIN
-        SELECT UserID, PasswordHash, PasswordSalt FROM {clsHelper.tableName} WHERE Username = @Username;
+        SELECT UserID, PasswordHash, PasswordSalt, RoleName FROM {clsHelper.tableName} INNER  JOIN Roles ON {clsHelper.tableName}.RoleID = Roles.RoleID  WHERE Username = @Username;
     END
     ";
             return SP;

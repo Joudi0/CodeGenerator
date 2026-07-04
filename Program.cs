@@ -338,7 +338,7 @@ namespace WebAPI.Services
             _configuration = configuration;
         }
 
-        public string GenerateJWTToken(string username, int userId)
+        public string GenerateJWTToken( int userId, string username, string RoleName)
         {
             var jwtSettings = _configuration.GetSection(""JwtSettings"");
             var secretKey = jwtSettings[""SecretKey""];
@@ -350,7 +350,7 @@ namespace WebAPI.Services
             {
                 new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
                 new Claim(ClaimTypes.Name, username),
-                new Claim(ClaimTypes.Role, ""User"")
+                new Claim(ClaimTypes.Role, RoleName)
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
@@ -434,8 +434,67 @@ namespace WebAPI.Controllers
 
             File.WriteAllText(authControllerPath, fullAuthControllerCode);
             TrackLines(fullAuthControllerCode);
+
+            // 6. Creating and Seeding Boundaries table directly in DB
+            Console.Write("-> Ensuring Roles table exists... ");
+            string connectionString = System.Configuration.ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString; 
+            string RolesSql = @"
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Roles')
+        BEGIN
+            CREATE TABLE Roles (
+                RoleID INT IDENTITY(1,1) PRIMARY KEY,
+                RoleName NVARCHAR(50) NOT NULL UNIQUE
+            );
+            INSERT INTO Roles (RoleName) VALUES ('Admin'), ('User'), ('Public');
+        END";
+
+            using (Microsoft.Data.SqlClient.SqlConnection conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+            {
+                using (Microsoft.Data.SqlClient.SqlCommand cmd = new Microsoft.Data.SqlClient.SqlCommand(RolesSql, conn))
+                {
+                    await conn.OpenAsync();
+                    await cmd.ExecuteNonQueryAsync();
+                }
+            }
+            Console.WriteLine("[Done]");
+
+            // 7. Adding enRoles enum dynamically from DB to Shared/Enums folder
+            Console.Write("-> Making Dynamic Roles Enum... ");
+            string enumsFolder = Path.Combine(_projectDirectory, "Shared", "Enums"); //
+            if (!Directory.Exists(enumsFolder)) Directory.CreateDirectory(enumsFolder);
+
+            StringBuilder enumMembers = new StringBuilder();
+            string fetchRolesSql = "SELECT RoleID, RoleName FROM Roles ORDER BY RoleID;";
+
+            using (Microsoft.Data.SqlClient.SqlConnection conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+            {
+                using (Microsoft.Data.SqlClient.SqlCommand cmd = new Microsoft.Data.SqlClient.SqlCommand(fetchRolesSql, conn))
+                {
+                    await conn.OpenAsync();
+                    using (Microsoft.Data.SqlClient.SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            int roleId = reader.GetInt32(0);
+                            string roleName = reader.GetString(1).Replace(" ", ""); // clean up role name for enum
+                            enumMembers.AppendLine($"        {roleName} = {roleId},");
+                        }
+                    }
+                }
+            }
+
+            string enumCode = $@"namespace Shared
+{{
+    public enum enRoles
+    {{
+{enumMembers.ToString().TrimEnd('\n', '\r', ',')}
+    }}
+}}";
+
+            string enumPath = Path.Combine(enumsFolder, "enRoles.cs");
+            File.WriteAllText(enumPath, enumCode);
+            TrackLines(enumCode);
+            Console.WriteLine("[Done]");
         }
-
-
     }
 }

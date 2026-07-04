@@ -98,6 +98,7 @@ namespace Shared
         public int UserID {{ get; set; }}
         public string PasswordHash {{ get; set; }}
         public string PasswordSalt {{ get; set; }}
+        public string RoleName {{ get; set; }}
     }}
 }}
 ";
@@ -138,7 +139,6 @@ namespace Shared
         //  Web API Controllers
         // ==========================================
 
-
         public static string loginAction()
         {
             return $@"
@@ -160,14 +160,14 @@ namespace Shared
             if (loginDto == null || string.IsNullOrEmpty(loginDto.Username) || string.IsNullOrEmpty(loginDto.Password))
                 return BadRequest(""Username and Password are required."");
 
-            // Verify credentials via BLL which returns the actual UserID or null
-            int? userId = await {clsHelper.className}.checkLogin(loginDto.Username, loginDto.Password);
+            // Verify credentials via BLL which now returns the AuthDTO object
+            AuthDTO authData = await {clsHelper.className}.checkLogin(loginDto.Username, loginDto.Password);
             
-            if (userId == null) 
+            if (authData == null) 
                 return Unauthorized(""Invalid username or password."");
 
-            // Generate the final secure token using the actual database UserID
-            var token = tokenService.GenerateJWTToken(loginDto.Username, userId.Value);
+            // Generate the final secure token using the injected tokenService parameters
+            var token = tokenService.GenerateJWTToken(authData.UserID, loginDto.Username, authData.RoleName);
 
             return Ok(new {{ Token = token }});
         }}
@@ -218,6 +218,23 @@ namespace Shared
             string route = (columnIndex == 0) ? "{id}" : $"{C.name}/{{{C.name}}}";
             string paramName = (columnIndex == 0) ? "id" : C.name;
 
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            string ownershipCheck = "";
+            // Ownership check: If the table is "User" and the request is for the first column (ID), enforce that users can only view their own profile unless they are an Admin.
+            if (isUser && columnIndex == 0)
+            {
+                ownershipCheck = $@"
+            // Ownership check: Users can only view their own profile
+            if (!User.IsInRole(""Admin""))
+            {{
+                var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (currentUserId != {paramName}.ToString())
+                    return Forbid(""You can only view your own profile."");
+            }}
+";
+            }
+
             return $@"
         /// <summary>
         /// Retrieves a record by its {C.name}.
@@ -226,12 +243,13 @@ namespace Shared
         /// <returns>An IActionResult containing the requested record details.</returns>
         /// <response code=""200"">Returns the found record details.</response>
         /// <response code=""404"">If no record matches the provided {C.name}.</response>
+        [Authorize(Roles = ""Admin,User"")]
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> {actionName}({C.type} {paramName})
         {{
-            {clsHelper.className}FullDTO result = await cls{clsHelper.objectName}.{bllMethodName}({paramName});
+{ownershipCheck}            {clsHelper.className}FullDTO result = await cls{clsHelper.objectName}.{bllMethodName}({paramName});
             if (result == null) return NotFound($""{clsHelper.objectName} with {C.name} {{{paramName}}} not found."");
             return Ok(result);
         }}
@@ -240,15 +258,19 @@ namespace Shared
 
         public static string addAction()
         {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string roles = isUser ? "Admin" : "Admin,User";
+
             return $@"
         /// <summary>
         /// Adds a new record to the database.
         /// </summary>
         /// <param name=""dto"">The full data transfer object for creation.</param>
         /// <returns>An IActionResult containing the created record details and location.</returns>
-        /// <response code=""210"">Returns the newly created record along with its location.</response>
+        /// <response code=""201"">Returns the newly created record along with its location.</response>
         /// <response code=""400"">If the input payload is null or invalid.</response>
         /// <response code=""500"">If an internal database error occurs during the operation.</response>
+        [Authorize(Roles = ""{roles}"")]
         [HttpPost]
         [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
@@ -265,6 +287,23 @@ namespace Shared
 
         public static string updateAction()
         {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            string ownershipCheck = "";
+            if (isUser)
+            {
+                string idFieldName = clsHelper.ColumnsForCsharp[0].name;
+                ownershipCheck = $@"
+            // Ownership check for user profiles
+            if (!User.IsInRole(""Admin""))
+            {{
+                var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (currentUserId != dto.{idFieldName}.ToString())
+                    return Forbid(""You can only update your own account."");
+            }}
+";
+            }
+
             return $@"
         /// <summary>
         /// Updates an existing record in the database.
@@ -274,13 +313,14 @@ namespace Shared
         /// <response code=""200"">If the record was updated successfully.</response>
         /// <response code=""400"">If the input payload is null.</response>
         /// <response code=""404"">If the record to update does not exist or modification failed.</response>
+        [Authorize(Roles = ""Admin,User"")]
         [HttpPut]
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Update([FromBody] {clsHelper.className}FullDTO dto)
         {{
-            if (dto == null) return BadRequest(""Invalid data payload."");
+            if (dto == null) return BadRequest(""Invalid data payload."");{ownershipCheck}
             bool isUpdated = await cls{clsHelper.objectName}.update{clsHelper.objectName}(dto);
             if (!isUpdated) return NotFound($""{clsHelper.objectName} update failed or record not found."");
             return Ok(""Updated successfully."");
@@ -290,7 +330,24 @@ namespace Shared
 
         public static string deleteAction(clsHelper.Column C)
         {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
             string bllMethodName = $"delete{clsHelper.objectName}";
+            string roles = isUser ? "Admin,User" : "Admin";
+
+            string ownershipCheck = "";
+            if (isUser)
+            {
+                ownershipCheck = $@"
+            // Ownership check for deletions
+            if (!User.IsInRole(""Admin""))
+            {{
+                var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (currentUserId != {C.name}.ToString())
+                    return Forbid(""You can only delete your own account."");
+            }}
+";
+            }
+
             return $@"
         /// <summary>
         /// Deletes a specific record using its unique identifier.
@@ -299,12 +356,13 @@ namespace Shared
         /// <returns>An IActionResult confirming deletion.</returns>
         /// <response code=""200"">If the record was deleted successfully.</response>
         /// <response code=""404"">If the target record is not found or cannot be deleted.</response>
+        [Authorize(Roles = ""{roles}"")]
         [HttpDelete(""{C.name}/{{{C.name}}}"")]
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Delete({C.type} {C.name})
         {{
-            bool isDeleted = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
+{ownershipCheck}            bool isDeleted = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
             if (!isDeleted) return NotFound($""{clsHelper.objectName} not found or couldn't be deleted."");
             return Ok(""Deleted successfully."");
         }}
@@ -318,6 +376,9 @@ namespace Shared
             string actionName = (columnIndex == 0) ? "ExistsByID" : $"ExistsBy{C.name}";
             string route = $"exists/{C.name}/{{{C.name}}}";
 
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string roles = isUser ? "Admin" : "Admin,User";
+
             return $@"
         /// <summary>
         /// Checks whether a record exists based on the provided criteria.
@@ -325,6 +386,7 @@ namespace Shared
         /// <param name=""{C.name}"">The field value to look up.</param>
         /// <returns>An IActionResult containing a boolean flag indicating existence.</returns>
         /// <response code=""200"">Returns true if the record exists, otherwise false.</response>
+        [Authorize(Roles = ""{roles}"")]
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name})
@@ -337,6 +399,9 @@ namespace Shared
 
         public static string pagingAction()
         {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string roles = isUser ? "Admin" : "Admin,User";
+
             return $@"
         /// <summary>
         /// Retrieves a paginated list of records based on query filters.
@@ -347,6 +412,7 @@ namespace Shared
         /// <param name=""direction"">The sorting direction constraint ('ASC' or 'DESC').</param>
         /// <returns>An IActionResult containing the filtered collection of Brief DTOs.</returns>
         /// <response code=""200"">Returns the paginated data collection matching criteria.</response>
+        [Authorize(Roles = ""{roles}"")]
         [HttpGet(""page"")]
         [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetPage([FromQuery] int rowsPerPage = 10, [FromQuery] int pageNumber = 1, [FromQuery] string sortColumn = ""{clsHelper.Columns[0].name}"", [FromQuery] string direction = ""ASC"")
@@ -363,6 +429,9 @@ namespace Shared
             string actionName = $"GetAllBriefBy{C.name}";
             string route = $"all-brief/by/{C.name}/{{{C.name}}}";
 
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string roles = isUser ? "Admin" : "Admin,User";
+
             return $@"
         /// <summary>
         /// Retrieves all matching records in brief format filtered by a specific column.
@@ -370,6 +439,7 @@ namespace Shared
         /// <param name=""{C.name}"">The lookup criterion value.</param>
         /// <returns>An IActionResult containing a collection of Brief DTOs.</returns>
         /// <response code=""200"">Returns the list of brief format entries.</response>
+        [Authorize(Roles = ""{roles}"")]
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name})
@@ -386,6 +456,9 @@ namespace Shared
             string actionName = $"GetAllFullBy{C.name}";
             string route = $"all-full/by/{C.name}/{{{C.name}}}";
 
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string roles = isUser ? "Admin" : "Admin,User";
+
             return $@"
         /// <summary>
         /// Retrieves all matching records in full format filtered by a specific column.
@@ -393,6 +466,7 @@ namespace Shared
         /// <param name=""{C.name}"">The lookup criterion value.</param>
         /// <returns>An IActionResult containing a collection of Full DTOs.</returns>
         /// <response code=""200"">Returns the list of full format entries.</response>
+        [Authorize(Roles = ""{roles}"")]
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof(List<{clsHelper.className}FullDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name})
@@ -417,7 +491,6 @@ using Shared;
 namespace WebAPI.Controllers
 {{
     [ApiController]
-    [Authorize]
     [Route(""api/[controller]"")]
     public class {clsHelper.objectName}Controller : ControllerBase
     {{
