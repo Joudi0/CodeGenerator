@@ -27,10 +27,10 @@ namespace CodeGenerator
             {
                 if (col.composition)
                 {
-                    // 1. Keep the primitive ID for database and DAL operations (Fixed Newline)
+                    // 1. Keep the primitive ID for database and DAL operations
                     Properties += $"{tabs}public {col.type} {col.name} {{ get; set; }}\n";
 
-                    // 2. Dynamically construct and append the clean Nested Brief DTO property (Fixed Newline)
+                    // 2. Dynamically construct and append the clean Nested Brief DTO property
                     string cleanName = col.name.Substring(0, col.name.Length - 2);
                     string dtoType = "cls" + char.ToUpper(cleanName[0]) + cleanName.Substring(1) + "BriefDTO";
                     string propName = char.ToUpper(cleanName[0]) + cleanName.Substring(1) + "Details";
@@ -210,7 +210,7 @@ namespace Shared
 ";
         }
 
-        public static string getByAction(clsHelper.Column C)
+        public static string getByAction(clsHelper.Column C, string roles)
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);
             string bllMethodName = (columnIndex == 0) ? $"get{clsHelper.objectName}ByID" : $"get{clsHelper.objectName}By{C.name}";
@@ -220,8 +220,11 @@ namespace Shared
 
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
 
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
+
             string ownershipCheck = "";
-            // Ownership check: If the table is "User" and the request is for the first column (ID), enforce that users can only view their own profile unless they are an Admin.
             if (isUser && columnIndex == 0)
             {
                 ownershipCheck = $@"
@@ -243,7 +246,7 @@ namespace Shared
         /// <returns>An IActionResult containing the requested record details.</returns>
         /// <response code=""200"">Returns the found record details.</response>
         /// <response code=""404"">If no record matches the provided {C.name}.</response>
-        [Authorize(Roles = ""Admin,User"")]
+        {authAttribute}
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
@@ -256,10 +259,11 @@ namespace Shared
 ";
         }
 
-        public static string addAction()
+        public static string addAction(string roles)
         {
-            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-            string roles = isUser ? "Admin" : "Admin,User";
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
@@ -269,8 +273,8 @@ namespace Shared
         /// <returns>An IActionResult containing the created record details and location.</returns>
         /// <response code=""201"">Returns the newly created record along with its location.</response>
         /// <response code=""400"">If the input payload is null or invalid.</response>
-        /// <response code=""500"">If an internal database error occurs during the operation.</response>
-        [Authorize(Roles = ""{roles}"")]
+        /// <response code=""500"">If an internal database error occurs during the operation.<///response>
+        {authAttribute}
         [HttpPost]
         [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
@@ -285,9 +289,13 @@ namespace Shared
 ";
         }
 
-        public static string updateAction()
+        public static string updateAction(string roles)
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
 
             string ownershipCheck = "";
             if (isUser)
@@ -313,7 +321,7 @@ namespace Shared
         /// <response code=""200"">If the record was updated successfully.</response>
         /// <response code=""400"">If the input payload is null.</response>
         /// <response code=""404"">If the record to update does not exist or modification failed.</response>
-        [Authorize(Roles = ""Admin,User"")]
+        {authAttribute}
         [HttpPut]
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
@@ -328,11 +336,14 @@ namespace Shared
 ";
         }
 
-        public static string deleteAction(clsHelper.Column C)
+        public static string deleteAction(clsHelper.Column C, string roles)
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
             string bllMethodName = $"delete{clsHelper.objectName}";
-            string roles = isUser ? "Admin,User" : "Admin";
+
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
 
             string ownershipCheck = "";
             if (isUser)
@@ -356,7 +367,7 @@ namespace Shared
         /// <returns>An IActionResult confirming deletion.</returns>
         /// <response code=""200"">If the record was deleted successfully.</response>
         /// <response code=""404"">If the target record is not found or cannot be deleted.</response>
-        [Authorize(Roles = ""{roles}"")]
+        {authAttribute}
         [HttpDelete(""{C.name}/{{{C.name}}}"")]
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
@@ -369,15 +380,16 @@ namespace Shared
 ";
         }
 
-        public static string isExistAction(clsHelper.Column C)
+        public static string isExistAction(clsHelper.Column C, string roles)
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);
             string bllMethodName = (columnIndex == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
             string actionName = (columnIndex == 0) ? "ExistsByID" : $"ExistsBy{C.name}";
             string route = $"exists/{C.name}/{{{C.name}}}";
 
-            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-            string roles = isUser ? "Admin" : "Admin,User";
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
@@ -386,7 +398,7 @@ namespace Shared
         /// <param name=""{C.name}"">The field value to look up.</param>
         /// <returns>An IActionResult containing a boolean flag indicating existence.</returns>
         /// <response code=""200"">Returns true if the record exists, otherwise false.</response>
-        [Authorize(Roles = ""{roles}"")]
+        {authAttribute}
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name})
@@ -397,10 +409,11 @@ namespace Shared
 ";
         }
 
-        public static string pagingAction()
+        public static string pagingAction(string roles)
         {
-            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-            string roles = isUser ? "Admin" : "Admin,User";
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
@@ -412,7 +425,7 @@ namespace Shared
         /// <param name=""direction"">The sorting direction constraint ('ASC' or 'DESC').</param>
         /// <returns>An IActionResult containing the filtered collection of Brief DTOs.</returns>
         /// <response code=""200"">Returns the paginated data collection matching criteria.</response>
-        [Authorize(Roles = ""{roles}"")]
+        {authAttribute}
         [HttpGet(""page"")]
         [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetPage([FromQuery] int rowsPerPage = 10, [FromQuery] int pageNumber = 1, [FromQuery] string sortColumn = ""{clsHelper.Columns[0].name}"", [FromQuery] string direction = ""ASC"")
@@ -423,14 +436,15 @@ namespace Shared
 ";
         }
 
-        public static string getAllBriefByAction(clsHelper.Column C)
+        public static string getAllBriefByAction(clsHelper.Column C, string roles)
         {
             string bllMethodName = $"getAllBriefBy{C.name}";
             string actionName = $"GetAllBriefBy{C.name}";
             string route = $"all-brief/by/{C.name}/{{{C.name}}}";
 
-            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-            string roles = isUser ? "Admin" : "Admin,User";
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
@@ -439,7 +453,7 @@ namespace Shared
         /// <param name=""{C.name}"">The lookup criterion value.</param>
         /// <returns>An IActionResult containing a collection of Brief DTOs.</returns>
         /// <response code=""200"">Returns the list of brief format entries.</response>
-        [Authorize(Roles = ""{roles}"")]
+        {authAttribute}
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name})
@@ -450,14 +464,15 @@ namespace Shared
 ";
         }
 
-        public static string getAllFullByAction(clsHelper.Column C)
+        public static string getAllFullByAction(clsHelper.Column C, string roles)
         {
             string bllMethodName = $"getAllFullBy{C.name}";
             string actionName = $"GetAllFullBy{C.name}";
             string route = $"all-full/by/{C.name}/{{{C.name}}}";
 
-            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-            string roles = isUser ? "Admin" : "Admin,User";
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
@@ -466,7 +481,7 @@ namespace Shared
         /// <param name=""{C.name}"">The lookup criterion value.</param>
         /// <returns>An IActionResult containing a collection of Full DTOs.</returns>
         /// <response code=""200"">Returns the list of full format entries.</response>
-        [Authorize(Roles = ""{roles}"")]
+        {authAttribute}
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof(List<{clsHelper.className}FullDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name})

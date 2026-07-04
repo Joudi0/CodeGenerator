@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 namespace CodeGenerator
 {
@@ -25,8 +27,10 @@ namespace CodeGenerator
         public static List<Column> Columns;
         public static List<Column> mappedColumns;
         public static List<Column> ColumnsForCsharp;
+        public static List<string> AvailableRoles = new List<string>();
         // The global dopamine counter!
         public static int TotalLinesGenerated = 0;
+        public static string connectionString = ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString;
 
         public static Column makeMappedColumnByName(string name)
         {
@@ -42,7 +46,7 @@ namespace CodeGenerator
         {
             List<Column> columnsList = new List<Column>();
 
-            SqlConnection connection = new SqlConnection(ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString);
+            SqlConnection connection = new SqlConnection(connectionString);
             string query = $"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{tableName}' ORDER BY ORDINAL_POSITION;";
             SqlCommand command = new SqlCommand(query, connection);
 
@@ -62,10 +66,60 @@ namespace CodeGenerator
             }
             catch (Exception) { throw; }
             finally { connection.Close(); }
-
             return columnsList;
         }
 
+        public static void LoadAvailableRoles()
+        {
+            // If roles are already loaded, exit immediately
+            if (AvailableRoles.Count > 0) return;
+
+
+            // SQL script to ensure table exists and seed it with true roles (Public removed)
+            string ensureRolesSql = @"
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Roles')
+        BEGIN
+            CREATE TABLE Roles (
+                RoleID INT IDENTITY(1,1) PRIMARY KEY,
+                RoleName NVARCHAR(50) NOT NULL UNIQUE
+            );
+            INSERT INTO Roles (RoleName) VALUES ('Admin'), ('User');
+        END";
+
+            string fetchRolesSql = "SELECT RoleName FROM Roles ORDER BY RoleID;";
+
+            try
+            {
+                using (var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+                {
+                    conn.Open();
+
+                    // 1. First, ensure the Roles table exists and is seeded
+                    using (var cmdEnsure = new Microsoft.Data.SqlClient.SqlCommand(ensureRolesSql, conn))
+                    {
+                        cmdEnsure.ExecuteNonQuery();
+                    }
+
+                    // 2. Next, fetch the roles from the guaranteed database table
+                    using (var cmdFetch = new Microsoft.Data.SqlClient.SqlCommand(fetchRolesSql, conn))
+                    {
+                        using (var reader = cmdFetch.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                AvailableRoles.Add(reader.GetString(0).Replace(" ", ""));
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // The catch block now acts as a true safety net for actual connection issues
+                Console.WriteLine($"\n[red]Database Error during role initialization:[/] {ex.Message}");
+                AvailableRoles = new List<string> { "Admin", "User" };
+            }
+        }
         public static string mapFromSQLToCsharp(string sql)
         {
             switch (sql)
@@ -480,9 +534,170 @@ namespace Shared
             }
             return tableNames;
         }
+        public static async Task Auth()
+        {
+        string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
+        // 1. Adding clsTokenService to WebAPI project
+        string webApiServicesFolder = Path.Combine(_projectDirectory, "WebAPI", "Services");
+            if (!Directory.Exists(webApiServicesFolder)) Directory.CreateDirectory(webApiServicesFolder);
+
+            string clsTokenServicePath = Path.Combine(webApiServicesFolder, "clsTokenService.cs");
+            string clsTokenService = @"using System;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+
+namespace WebAPI.Services
+{
+    public class clsTokenService
+    {
+        private readonly IConfiguration _configuration;
+        
+        public clsTokenService(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
+        public string GenerateJWTToken( int userId, string username, string RoleName)
+        {
+            var jwtSettings = _configuration.GetSection(""JwtSettings"");
+            var secretKey = jwtSettings[""SecretKey""];
+            var issuer = jwtSettings[""Issuer""];
+            var audience = jwtSettings[""Audience""];
+            var expirationInHours = Convert.ToDouble(jwtSettings[""ExpirationInHours""] ?? ""1"");
+
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                new Claim(ClaimTypes.Name, username),
+                new Claim(ClaimTypes.Role, RoleName)
+            };
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(
+                issuer: issuer,
+                audience: audience,
+                claims: claims,
+                expires: DateTime.Now.AddHours(expirationInHours),
+                signingCredentials: creds
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+    }
+}";
+            File.WriteAllText(clsTokenServicePath, clsTokenService);
+            TrackLines(clsTokenService);
+
+            // 2. Adding AuthDTO to Shared/DTOs/Auth folder
+            string authDto = Path.Combine(_projectDirectory, "Shared", "DTOs", "Auth");
+            if (!Directory.Exists(authDto)) Directory.CreateDirectory(authDto);
+
+            string AuthDTOPath = Path.Combine(authDto, "AuthDTO.cs");
+            string AuthDTOCode = clsAPIs.SecurityDTO();
+            using (StreamWriter writer = new StreamWriter(AuthDTOPath))
+            {
+                await writer.WriteAsync(AuthDTOCode);
+            }
+            TrackLines(AuthDTOCode);
+
+            // 3. Adding RegisterRequestDTO to Shared/DTOs/Auth folder
+            string RegisterRequestDTOPath = Path.Combine(authDto, "RegisterRequestDTO.cs");
+            string RegisterRequestDTOCode = clsAPIs.RegisterRequestDTO();
+            using (StreamWriter writer = new StreamWriter(RegisterRequestDTOPath))
+            {
+                await writer.WriteAsync(RegisterRequestDTOCode);
+            }
+            TrackLines(RegisterRequestDTOCode);
+
+            // 4. Adding LoginRequestDTO to Shared/DTOs/Auth folder
+            string loginRequestDTOPath = Path.Combine(authDto, "LoginRequestDTO.cs");
+            string loginRequestDTOCode = @"namespace Shared
+{
+    public class LoginRequestDTO
+    {
+        public string Username { get; set; }
+        public string Password { get; set; }
+    }
+}";
+            File.WriteAllText(loginRequestDTOPath, loginRequestDTOCode);
+            TrackLines(loginRequestDTOCode);
+
+            // 5. Creating the actual AuthController.cs file with dynamic endpoints
+            string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
+            if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
+            string authControllerPath = Path.Combine(controllersFolder, "AuthController.cs");
+
+            // Combine both login and register string builders
+            StringBuilder authActions = new StringBuilder();
+            authActions.Append(clsAPIs.loginAction());
+            authActions.Append(clsAPIs.registerAction());
+
+            string fullAuthControllerCode = $@"using BLL;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
+using System.Threading.Tasks;
+using WebAPI.Services;
+using Shared;
+
+namespace WebAPI.Controllers
+{{
+    [ApiController]
+    [Route(""api/[controller]"")]
+    public class AuthController : ControllerBase
+    {{
+{authActions}
+    }}
+}}";
+
+            File.WriteAllText(authControllerPath, fullAuthControllerCode);
+            TrackLines(fullAuthControllerCode);
+
+            // 6. Adding enRoles enum dynamically from DB to Shared/Enums folder
+            Console.Write("-> Making Dynamic Roles Enum... ");
+            string enumsFolder = Path.Combine(_projectDirectory, "Shared", "Enums"); //
+            if (!Directory.Exists(enumsFolder)) Directory.CreateDirectory(enumsFolder);
+
+            StringBuilder enumMembers = new StringBuilder();
+            string fetchRolesSql = "SELECT RoleID, RoleName FROM Roles ORDER BY RoleID;";
+
+            using (Microsoft.Data.SqlClient.SqlConnection conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+            {
+                using (Microsoft.Data.SqlClient.SqlCommand cmd = new Microsoft.Data.SqlClient.SqlCommand(fetchRolesSql, conn))
+                {
+                    await conn.OpenAsync();
+                    using (Microsoft.Data.SqlClient.SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            int roleId = reader.GetInt32(0);
+                            string roleName = reader.GetString(1).Replace(" ", ""); // clean up role name for enum
+                            enumMembers.AppendLine($"        {roleName} = {roleId},");
+                        }
+                    }
+                }
+            }
+
+            string enumCode = $@"namespace Shared
+{{
+    public enum enRoles
+    {{
+{enumMembers.ToString().TrimEnd('\n', '\r', ',')}
+    }}
+}}";
+
+            string enumPath = Path.Combine(enumsFolder, "enRoles.cs");
+            File.WriteAllText(enumPath, enumCode);
+            TrackLines(enumCode);
+            Console.WriteLine("[Done]");
+        }
 
         public static void debugThing(object obj)
-            {
+        {
                 Type type = obj.GetType();
                 if(type != null)
                 {
@@ -509,6 +724,6 @@ namespace Shared
                     object myClass = Activator.CreateInstance(type);
                 }
 
-            }
         }
+    }
 }

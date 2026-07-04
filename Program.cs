@@ -12,17 +12,19 @@ namespace CodeGenerator
     internal class Program
     {
         private static string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
+
         static async Task Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
             AnsiConsole.Write(
-                                    new FigletText("ADO Gen Code")
-                                        .Centered()
-                                        .Color(Color.Green));
+                                new FigletText("ADO Gen Code")
+                                    .Centered()
+                                    .Color(Color.Green));
 
             AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator[/]").Justify(Justify.Left));
             AnsiConsole.MarkupLine("[grey]This tool generates DAL and BLL CRUD ADO.NET for you.[/]");
             AnsiConsole.MarkupLine("[red]Notice:[/] Please ensure database settings are configured in [cyan]clsHelper.connectionString[/].\n");
+
             Console.Write("First Time? (y/n): ");
             string answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
@@ -32,9 +34,10 @@ namespace CodeGenerator
 
                 clsHelper.GenerateArchitectureSolution(_projectDirectory, sn);
             }
-            // fetching all tables from the database using clsHelper.GetAllTables()
-            List<string> databaseTables = clsHelper.GetAllTables();
 
+            // Fetching all tables from the database using clsHelper.GetAllTables()
+            List<string> databaseTables = clsHelper.GetAllTables();
+            clsHelper.LoadAvailableRoles();
             AnsiConsole.MarkupLine($"[cyan]Found {databaseTables.Count} tables in the database.[/]\n");
 
             foreach (string tName in databaseTables)
@@ -66,6 +69,7 @@ namespace CodeGenerator
             AnsiConsole.MarkupLine("\n[grey]Press any key to exit...[/]");
             Console.ReadKey();
         }
+
         static bool isUserTable = false;
 
         public static async Task Run(string tableName)
@@ -93,11 +97,11 @@ namespace CodeGenerator
                 DALFuncs.Append(clsDAL.getAuthData());
                 BLLFuncs.Append(clsBLL.checkLogin());
             }
+
             Console.Write($"\nEnter The Class Name For {tableName} (cls First will be added on it): ");
             clsHelper.objectName = Console.ReadLine();
             clsHelper.className = "cls" + clsHelper.objectName;
             string answer = "yes";
-            
 
             clsHelper.mappedColumns = clsHelper.mappingTheColumns();
             clsHelper.ColumnsForCsharp = clsHelper.getColumnsForCsharp();
@@ -112,7 +116,10 @@ namespace CodeGenerator
                 DALFuncs.Append(clsDAL.getRecordByColumnFunc(column));
                 BLLFuncs.Append(clsBLL.getByFunc(column));
                 BLLFuncs.Append(clsBLL.getBriefFunc(column));
-                Controller.Append(clsAPIs.getByAction(column));
+
+                // Prompt console for allowed roles for this GetBy action and pass them to the Controller
+                string getByRoles = clsPresentation.PromptForActionRoles($"GetBy{colName}");
+                Controller.Append(clsAPIs.getByAction(column, getByRoles));
             }
 
             // Update:
@@ -123,7 +130,10 @@ namespace CodeGenerator
                 clsHelper.allSPs.Add(clsSPs.updateSP());
                 DALFuncs.Append(clsDAL.updateFunc());
                 BLLFuncs.Append(clsBLL.updateFunc());
-                Controller.Append(clsAPIs.updateAction());
+
+                // Prompt console for Update action roles
+                string updateRoles = clsPresentation.PromptForActionRoles("Update");
+                Controller.Append(clsAPIs.updateAction(updateRoles));
             }
 
             // Delete:
@@ -135,7 +145,10 @@ namespace CodeGenerator
                 clsHelper.allSPs.Add(clsSPs.deleteSP());
                 DALFuncs.Append(clsDAL.deleteFunc(C));
                 BLLFuncs.Append(clsBLL.deleteFunc(C));
-                Controller.Append(clsAPIs.deleteAction(C));
+
+                // Prompt console for Delete action roles
+                string deleteRoles = clsPresentation.PromptForActionRoles("Delete");
+                Controller.Append(clsAPIs.deleteAction(C, deleteRoles));
             }
 
             // Add:
@@ -146,7 +159,10 @@ namespace CodeGenerator
                 clsHelper.allSPs.Add(clsSPs.addSP());
                 DALFuncs.Append(clsDAL.addFunc());
                 BLLFuncs.Append(clsBLL.addFunc());
-                Controller.Append(clsAPIs.addAction());
+
+                // Prompt console for Add action roles
+                string addRoles = clsPresentation.PromptForActionRoles("Add");
+                Controller.Append(clsAPIs.addAction(addRoles));
             }
 
             // isExist:
@@ -162,7 +178,10 @@ namespace CodeGenerator
                     clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(column));
                     DALFuncs.Append(clsDAL.isExistsFunc(column));
                     BLLFuncs.Append(clsBLL.isExistsFunc(column));
-                    Controller.Append(clsAPIs.isExistAction(column));
+
+                    // Prompt console for IsExist action roles
+                    string existRoles = clsPresentation.PromptForActionRoles($"ExistsBy{colName}");
+                    Controller.Append(clsAPIs.isExistAction(column, existRoles));
                 }
             }
 
@@ -174,7 +193,10 @@ namespace CodeGenerator
                 clsHelper.allSPs.Add(clsSPs.PagingSP());
                 DALFuncs.Append(clsDAL.PagingFunc());
                 BLLFuncs.Append(clsBLL.PagingFunc());
-                Controller.Append(clsAPIs.pagingAction());
+
+                // Prompt console for Paging action roles
+                string pagingRoles = clsPresentation.PromptForActionRoles("GetPage (Paging)");
+                Controller.Append(clsAPIs.pagingAction(pagingRoles));
             }
 
             // getAll:
@@ -188,8 +210,10 @@ namespace CodeGenerator
                 BLLFuncs.Append(clsBLL.getAllBriefByFunc(firstColumn));
                 BLLFuncs.Append(clsBLL.getAllFullByFunc(firstColumn));
 
-                Controller.Append(clsAPIs.getAllBriefByAction(firstColumn));
-                Controller.Append(clsAPIs.getAllFullByAction(firstColumn));
+                // Prompt console for base GetAll action roles
+                string getAllRoles = clsPresentation.PromptForActionRoles("GetAll");
+                Controller.Append(clsAPIs.getAllBriefByAction(firstColumn, getAllRoles));
+                Controller.Append(clsAPIs.getAllFullByAction(firstColumn, getAllRoles));
 
                 clsHelper.allSPs.Add(clsSPs.selectAllSP());
                 Console.Write("GetAll Method Generated, do you want 'GetAll By' ? (yes/no): ");
@@ -206,8 +230,10 @@ namespace CodeGenerator
                         BLLFuncs.Append(clsBLL.getAllBriefByFunc(column));
                         BLLFuncs.Append(clsBLL.getAllFullByFunc(column));
 
-                        Controller.Append(clsAPIs.getAllBriefByAction(column));
-                        Controller.Append(clsAPIs.getAllFullByAction(column));
+                        // Prompt console for GetAllBy roles for each selected column
+                        string getAllByRoles = clsPresentation.PromptForActionRoles($"GetAllBy{colName}");
+                        Controller.Append(clsAPIs.getAllBriefByAction(column, getAllByRoles));
+                        Controller.Append(clsAPIs.getAllFullByAction(column, getAllByRoles));
                     }
                 }
             }
@@ -223,6 +249,7 @@ namespace CodeGenerator
                 {
                     Directory.CreateDirectory(_projectDirectory);
                 }
+
                 // Check for Folders
                 string dal = Path.Combine(_projectDirectory, "DAL");
                 string bll = Path.Combine(_projectDirectory, "BLL");
@@ -236,9 +263,11 @@ namespace CodeGenerator
                 if (!Directory.Exists(dto)) Directory.CreateDirectory(dto);
                 if (!Directory.Exists(briefDto)) Directory.CreateDirectory(briefDto);
                 if (!Directory.Exists(fullDto)) Directory.CreateDirectory(fullDto);
-                if(isUserTable)
+
+                if (isUserTable)
                 {
-                    await Auth();
+                    // Call the Auth logic now relocated inside clsHelper
+                    await clsHelper.Auth();
                 }
                 if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
 
@@ -270,7 +299,6 @@ namespace CodeGenerator
                     await writer.WriteAsync(bllCode);
                 }
                 TrackLines(bllCode); // Catch and count!
-
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making DTO Class... ");
@@ -288,7 +316,6 @@ namespace CodeGenerator
 
                 TrackLines(BriefDTOCode); // Catch and count!
                 TrackLines(FullDTOCode); // Catch and count!
-
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making Web API Controller... ");
@@ -311,190 +338,6 @@ namespace CodeGenerator
             {
                 AnsiConsole.MarkupLine($"\n[red]Error while saving files:[/] {ex.Message}");
             }
-        }
-
-        public static async Task Auth()
-        {
-            // 1. Adding clsTokenService to WebAPI project
-            string webApiServicesFolder = Path.Combine(_projectDirectory, "WebAPI", "Services");
-            if (!Directory.Exists(webApiServicesFolder)) Directory.CreateDirectory(webApiServicesFolder);
-
-            string clsTokenServicePath = Path.Combine(webApiServicesFolder, "clsTokenService.cs");
-            string clsTokenService = @"using System;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
-
-namespace WebAPI.Services
-{
-    public class clsTokenService
-    {
-        private readonly IConfiguration _configuration;
-        
-        public clsTokenService(IConfiguration configuration)
-        {
-            _configuration = configuration;
-        }
-
-        public string GenerateJWTToken( int userId, string username, string RoleName)
-        {
-            var jwtSettings = _configuration.GetSection(""JwtSettings"");
-            var secretKey = jwtSettings[""SecretKey""];
-            var issuer = jwtSettings[""Issuer""];
-            var audience = jwtSettings[""Audience""];
-            var expirationInHours = Convert.ToDouble(jwtSettings[""ExpirationInHours""] ?? ""1"");
-
-            var claims = new[]
-            {
-                new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-                new Claim(ClaimTypes.Name, username),
-                new Claim(ClaimTypes.Role, RoleName)
-            };
-
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken(
-                issuer: issuer,
-                audience: audience,
-                claims: claims,
-                expires: DateTime.Now.AddHours(expirationInHours),
-                signingCredentials: creds
-            );
-
-            return new JwtSecurityTokenHandler().WriteToken(token);
-        }
-    }
-}";
-            File.WriteAllText(clsTokenServicePath, clsTokenService);
-            TrackLines(clsTokenService);
-
-            // 2. Adding AuthDTO to Shared/DTOs/Auth folder
-            string authDto = Path.Combine(_projectDirectory, "Shared", "DTOs", "Auth");
-            if (!Directory.Exists(authDto)) Directory.CreateDirectory(authDto);
-
-            string AuthDTOPath = Path.Combine(authDto, "AuthDTO.cs");
-            string AuthDTOCode = clsAPIs.SecurityDTO();
-            using (StreamWriter writer = new StreamWriter(AuthDTOPath))
-            {
-                await writer.WriteAsync(AuthDTOCode);
-            }
-            TrackLines(AuthDTOCode);
-
-            // 3. Adding RegisterRequestDTO to Shared/DTOs/Auth folder
-            string RegisterRequestDTOPath = Path.Combine(authDto, "RegisterRequestDTO.cs");
-            string RegisterRequestDTOCode = clsAPIs.RegisterRequestDTO();
-            using (StreamWriter writer = new StreamWriter(RegisterRequestDTOPath))
-            {
-                await writer.WriteAsync(RegisterRequestDTOCode);
-            }
-            TrackLines(RegisterRequestDTOCode);
-
-            // 4. Adding LoginRequestDTO to Shared/DTOs/Auth folder
-            string loginRequestDTOPath = Path.Combine(authDto, "LoginRequestDTO.cs");
-            string loginRequestDTOCode = @"namespace Shared
-{
-    public class LoginRequestDTO
-    {
-        public string Username { get; set; }
-        public string Password { get; set; }
-    }
-}";
-            File.WriteAllText(loginRequestDTOPath, loginRequestDTOCode);
-            TrackLines(loginRequestDTOCode);
-
-            // 5. Creating the actual AuthController.cs file with dynamic endpoints
-            string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
-            if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
-            string authControllerPath = Path.Combine(controllersFolder, "AuthController.cs");
-
-            // Combine both login and register string builders
-            StringBuilder authActions = new StringBuilder();
-            authActions.Append(clsAPIs.loginAction());
-            authActions.Append(clsAPIs.registerAction());
-
-            string fullAuthControllerCode = $@"using BLL;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Http;
-using System.Threading.Tasks;
-using WebAPI.Services;
-using Shared;
-
-namespace WebAPI.Controllers
-{{
-    [ApiController]
-    [Route(""api/[controller]"")]
-    public class AuthController : ControllerBase
-    {{
-{authActions}
-    }}
-}}";
-
-            File.WriteAllText(authControllerPath, fullAuthControllerCode);
-            TrackLines(fullAuthControllerCode);
-
-            // 6. Creating and Seeding Boundaries table directly in DB
-            Console.Write("-> Ensuring Roles table exists... ");
-            string connectionString = System.Configuration.ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString; 
-            string RolesSql = @"
-        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Roles')
-        BEGIN
-            CREATE TABLE Roles (
-                RoleID INT IDENTITY(1,1) PRIMARY KEY,
-                RoleName NVARCHAR(50) NOT NULL UNIQUE
-            );
-            INSERT INTO Roles (RoleName) VALUES ('Admin'), ('User'), ('Public');
-        END";
-
-            using (Microsoft.Data.SqlClient.SqlConnection conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
-            {
-                using (Microsoft.Data.SqlClient.SqlCommand cmd = new Microsoft.Data.SqlClient.SqlCommand(RolesSql, conn))
-                {
-                    await conn.OpenAsync();
-                    await cmd.ExecuteNonQueryAsync();
-                }
-            }
-            Console.WriteLine("[Done]");
-
-            // 7. Adding enRoles enum dynamically from DB to Shared/Enums folder
-            Console.Write("-> Making Dynamic Roles Enum... ");
-            string enumsFolder = Path.Combine(_projectDirectory, "Shared", "Enums"); //
-            if (!Directory.Exists(enumsFolder)) Directory.CreateDirectory(enumsFolder);
-
-            StringBuilder enumMembers = new StringBuilder();
-            string fetchRolesSql = "SELECT RoleID, RoleName FROM Roles ORDER BY RoleID;";
-
-            using (Microsoft.Data.SqlClient.SqlConnection conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
-            {
-                using (Microsoft.Data.SqlClient.SqlCommand cmd = new Microsoft.Data.SqlClient.SqlCommand(fetchRolesSql, conn))
-                {
-                    await conn.OpenAsync();
-                    using (Microsoft.Data.SqlClient.SqlDataReader reader = await cmd.ExecuteReaderAsync())
-                    {
-                        while (await reader.ReadAsync())
-                        {
-                            int roleId = reader.GetInt32(0);
-                            string roleName = reader.GetString(1).Replace(" ", ""); // clean up role name for enum
-                            enumMembers.AppendLine($"        {roleName} = {roleId},");
-                        }
-                    }
-                }
-            }
-
-            string enumCode = $@"namespace Shared
-{{
-    public enum enRoles
-    {{
-{enumMembers.ToString().TrimEnd('\n', '\r', ',')}
-    }}
-}}";
-
-            string enumPath = Path.Combine(enumsFolder, "enRoles.cs");
-            File.WriteAllText(enumPath, enumCode);
-            TrackLines(enumCode);
-            Console.WriteLine("[Done]");
         }
     }
 }

@@ -88,7 +88,7 @@ namespace CodeGenerator
             string t = C.type.ToLower();
             if (t.Contains("char") || t.Contains("binary"))
             {
-                string len = (C.length == -1) ? "MAX" : C.length.ToString();
+                string len = (C.length == -1 || C.length == null) ? "MAX" : C.length.ToString();
                 return C.type + $"({len})";
             }
             return C.type;
