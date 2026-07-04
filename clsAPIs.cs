@@ -86,6 +86,15 @@ namespace Shared
 
         public static string FullDTO()
         {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string extraProperties = "";
+
+            // Password property is only included in the Full DTO for user tables to facilitate registration and updates
+            if (isUser)
+            {
+                extraProperties = "        public string Password { get; set; }\n";
+            }
+
             string DTO = $@"
 using System;
 using System.Data;
@@ -94,7 +103,7 @@ namespace Shared
 {{
     public class {clsHelper.className}FullDTO
     {{
-        {writeProperties(true)}
+        {writeProperties(true)}{extraProperties}
     }}
 }}
 ";
@@ -113,7 +122,7 @@ namespace Shared
         public int UserID {{ get; set; }}
         public string PasswordHash {{ get; set; }}
         public string PasswordSalt {{ get; set; }}
-        public enRole UserRoleID {{ get; set; }}
+        public enRoles UserRoleID {{ get; set; }}
     }}
 }}
 ";
@@ -185,8 +194,8 @@ namespace Shared
             if (authData == null) 
                 return Unauthorized(""Invalid username or password."");
 
-            // Generate the final secure token using the injected tokenService parameters
-            var token = tokenService.GenerateJWTToken(authData.UserID, loginDto.Username, authData.Role.ToString());    
+            // FIXED: Using UserRoleID instead of Role to match AuthDTO properties
+            var token = tokenService.GenerateJWTToken(authData.UserID, loginDto.Username, authData.UserRoleID.ToString());    
 
             return Ok(new {{ Token = token }});
         }}
@@ -244,16 +253,15 @@ namespace Shared
                 : $"[Authorize(Roles = \"{roles}\")]";
 
             string ownershipCheck = "";
+            string serviceInjection = "";
+
             if (isUser && columnIndex == 0)
             {
+                serviceInjection = ", [FromServices] IAuthorizationService authorizationService";
                 ownershipCheck = $@"
-            // Ownership check: Users can only view their own profile
-            if (!User.IsInRole(""Admin""))
-            {{
-                var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (currentUserId != {paramName}.ToString())
-                    return Forbid(""You can only view your own profile."");
-            }}
+            // Centralized Policy-Based Resource Authorization Check
+            var authResult = await authorizationService.AuthorizeAsync(User, {paramName}, ""UserOwnerOrAdmin"");
+            if (!authResult.Succeeded) return Forbid();
 ";
             }
 
@@ -269,48 +277,10 @@ namespace Shared
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> {actionName}({C.type} {paramName})
-        {{
-{ownershipCheck}            {clsHelper.className}FullDTO result = await cls{clsHelper.objectName}.{bllMethodName}({paramName});
+        public async Task<IActionResult> {actionName}({C.type} {paramName}{serviceInjection})
+        {{{ownershipCheck}            {clsHelper.className}FullDTO result = await cls{clsHelper.objectName}.{bllMethodName}({paramName});
             if (result == null) return NotFound($""{clsHelper.objectName} with {C.name} {{{paramName}}} not found."");
             return Ok(result);
-        }}
-";
-        }
-
-        public static string addAction(string roles)
-        {
-            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-
-            // if is it a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during creation
-            if (isUser && clsHelper.AvailableRoles.Count > 0)
-            {
-                roles = clsHelper.AvailableRoles[0];
-            }
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
-
-            return $@"
-        /// <summary>
-        /// Adds a new record to the database.
-        /// </summary>
-        /// <param name=""dto"">The full data transfer object for creation.</param>
-        /// <returns>An IActionResult containing the created record details and location.</returns>
-        /// <response code=""201"">Returns the newly created record along with its location.</response>
-        /// <response code=""400"">If the input payload is null or invalid.</response>
-        /// <response code=""500"">If an internal database error occurs during the operation.</response>
-        {authAttribute}
-        [HttpPost]
-        [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status201Created)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> Add([FromBody] {clsHelper.className}FullDTO dto)
-        {{
-            if (dto == null) return BadRequest(""Invalid data payload."");
-            int insertedID = await cls{clsHelper.objectName}.add{clsHelper.objectName}(dto);
-            if (insertedID == -1) return StatusCode(500, ""An error occurred while adding the record."");
-            return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, dto);
         }}
 ";
         }
@@ -324,16 +294,36 @@ namespace Shared
                 : $"[Authorize(Roles = \"{roles}\")]";
 
             string ownershipCheck = "";
+            string serviceInjection = "";
+            string passwordUpdateLogic = "";
+
             if (isUser)
             {
                 string idFieldName = clsHelper.ColumnsForCsharp[0].name;
+                serviceInjection = ", [FromServices] IAuthorizationService authorizationService";
+
+                // 1. Centralized Policy-Based Resource Authorization Check
                 ownershipCheck = $@"
-            // Ownership check for user profiles
-            if (!User.IsInRole(""Admin""))
+            // Centralized Policy-Based Resource Authorization Check
+            var authResult = await authorizationService.AuthorizeAsync(User, dto.{idFieldName}, ""UserOwnerOrAdmin"");
+            if (!authResult.Succeeded) return Forbid();
+";
+
+                // 2. Dynamic password hashing in case the admin/user wants to change their password during update
+                var hashColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("hash"));
+                var saltColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("salt"));
+
+                string hashName = (hashColumn.name != null) ? hashColumn.name : "PasswordHash";
+                string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
+
+                passwordUpdateLogic = $@"
+            // If a new password is provided during update, re-hash it and update the security fields.
+            // Otherwise, keep the existing hash and salt intact.
+            if (!string.IsNullOrEmpty(dto.Password))
             {{
-                var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (currentUserId != dto.{idFieldName}.ToString())
-                    return Forbid(""You can only update your own account."");
+                string salt = clsSecurityHelper.GenerateSalt();
+                dto.{saltName} = salt;
+                dto.{hashName} = clsSecurityHelper.ComputeHash(dto.Password, salt);
             }}
 ";
             }
@@ -352,9 +342,9 @@ namespace Shared
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Update([FromBody] {clsHelper.className}FullDTO dto)
+        public async Task<IActionResult> Update([FromBody] {clsHelper.className}FullDTO dto{serviceInjection})
         {{
-            if (dto == null) return BadRequest(""Invalid data payload."");{ownershipCheck}
+            if (dto == null) return BadRequest(""Invalid data payload."");{ownershipCheck}{passwordUpdateLogic}
             bool isUpdated = await cls{clsHelper.objectName}.update{clsHelper.objectName}(dto);
             if (!isUpdated) return NotFound($""{clsHelper.objectName} update failed or record not found."");
             return Ok(""Updated successfully."");
@@ -372,16 +362,15 @@ namespace Shared
                 : $"[Authorize(Roles = \"{roles}\")]";
 
             string ownershipCheck = "";
+            string serviceInjection = "";
+
             if (isUser)
             {
+                serviceInjection = ", [FromServices] IAuthorizationService authorizationService";
                 ownershipCheck = $@"
-            // Ownership check for deletions
-            if (!User.IsInRole(""Admin""))
-            {{
-                var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                if (currentUserId != {C.name}.ToString())
-                    return Forbid(""You can only delete your own account."");
-            }}
+            // Centralized Policy-Based Resource Authorization Check
+            var authResult = await authorizationService.AuthorizeAsync(User, {C.name}, ""UserOwnerOrAdmin"");
+            if (!authResult.Succeeded) return Forbid();
 ";
             }
 
@@ -397,11 +386,73 @@ namespace Shared
         [HttpDelete(""{C.name}/{{{C.name}}}"")]
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Delete({C.type} {C.name})
+        public async Task<IActionResult> Delete({C.type} {C.name}{serviceInjection})
         {{
 {ownershipCheck}            bool isDeleted = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
             if (!isDeleted) return NotFound($""{clsHelper.objectName} not found or couldn't be deleted."");
             return Ok(""Deleted successfully."");
+        }}
+";
+        }
+
+        public static string addAction(string roles)
+        {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            // if is it a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during creation
+            if (isUser && clsHelper.AvailableRoles.Count > 0)
+            {
+                roles = clsHelper.AvailableRoles[0];
+            }
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
+
+            string passwordHashingLogic = "";
+            if (isUser)
+            {
+                // بنشيك ديناميكياً على الاسم الحقيقي للعمودين متل ما هني بالداتابيز كرمال نمنع أي تضارب بالتسمية
+                var hashColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("hash"));
+                var saltColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("salt"));
+
+                string hashName = (hashColumn.name != null) ? hashColumn.name : "PasswordHash";
+                string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
+
+                passwordHashingLogic = $@"
+            // Automatically generate secure hash and salt for the new user record
+            if (!string.IsNullOrEmpty(dto.Password))
+            {{
+                string salt = clsSecurityHelper.GenerateSalt();
+                dto.{saltName} = salt;
+                dto.{hashName} = clsSecurityHelper.ComputeHash(dto.Password, salt);
+            }}
+            else
+            {{
+                return BadRequest(""Password is required for creating a new user."");
+            }}
+";
+            }
+
+            return $@"
+        /// <summary>
+        /// Adds a new record to the database.
+        /// </summary>
+        /// <param name=""dto"">The full data transfer object for creation.</param>
+        /// <returns>An IActionResult containing the created record details and location.</returns>
+        /// <response code=""201"">Returns the newly created record along with its location.</response>
+        /// <response code=""400"">If the input payload is null or invalid.</response>
+        /// <response code=""500"">If an internal database error occurs during the operation.</response>
+        {authAttribute}
+        [HttpPost]
+        [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> Add([FromBody] {clsHelper.className}FullDTO dto)
+        {{
+            if (dto == null) return BadRequest(""Invalid data payload."");{passwordHashingLogic}
+            int insertedID = await cls{clsHelper.objectName}.add{clsHelper.objectName}(dto);
+            if (insertedID == -1) return StatusCode(500, ""An error occurred while adding the record."");
+            return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, dto);
         }}
 ";
         }
@@ -412,6 +463,30 @@ namespace Shared
             string bllMethodName = (columnIndex == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
             string actionName = (columnIndex == 0) ? "ExistsByID" : $"ExistsBy{C.name}";
             string route = $"exists/{C.name}/{{{C.name}}}";
+
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            string ownershipCheck = "";
+            string serviceInjection = "";
+
+            if (isUser)
+            {
+                if (columnIndex == 0)
+                {
+                    // running centralized policy-based authorization check for user existence by ID
+                    serviceInjection = ", [FromServices] IAuthorizationService authorizationService";
+                    ownershipCheck = $@"
+            // Centralized Policy-Based Resource Authorization Check
+            var authResult = await authorizationService.AuthorizeAsync(User, {C.name}, ""UserOwnerOrAdmin"");
+            if (!authResult.Succeeded) return Forbid();
+";
+                }
+                else if (clsHelper.AvailableRoles.Count > 0)
+                {
+                    // if it is a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during existence checks
+                    roles = clsHelper.AvailableRoles[0];
+                }
+            }
 
             string authAttribute = (roles.ToLower() == "anonymous")
                 ? "[AllowAnonymous]"
@@ -427,9 +502,8 @@ namespace Shared
         {authAttribute}
         [HttpGet(""{route}"")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
-        public async Task<IActionResult> {actionName}({C.type} {C.name})
-        {{
-            bool exists = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
+        public async Task<IActionResult> {actionName}({C.type} {C.name}{serviceInjection})
+        {{{ownershipCheck}            bool exists = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
             return Ok(exists);
         }}
 ";
@@ -437,6 +511,14 @@ namespace Shared
 
         public static string pagingAction(string roles)
         {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            // if it is a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during paging
+            if (isUser && clsHelper.AvailableRoles.Count > 0)
+            {
+                roles = clsHelper.AvailableRoles[0];
+            }
+
             string authAttribute = (roles.ToLower() == "anonymous")
                 ? "[AllowAnonymous]"
                 : $"[Authorize(Roles = \"{roles}\")]";
@@ -468,6 +550,14 @@ namespace Shared
             string actionName = $"GetAllBriefBy{C.name}";
             string route = $"all-brief/by/{C.name}/{{{C.name}}}";
 
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            // if it is a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during creation
+            if (isUser && clsHelper.AvailableRoles.Count > 0)
+            {
+                roles = clsHelper.AvailableRoles[0];
+            }
+
             string authAttribute = (roles.ToLower() == "anonymous")
                 ? "[AllowAnonymous]"
                 : $"[Authorize(Roles = \"{roles}\")]";
@@ -495,6 +585,14 @@ namespace Shared
             string bllMethodName = $"getAllFullBy{C.name}";
             string actionName = $"GetAllFullBy{C.name}";
             string route = $"all-full/by/{C.name}/{{{C.name}}}";
+
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            // if it is a user table, restrict access to the highest available role (first in the list) to prevent unauthorized data exposure
+            if (isUser && clsHelper.AvailableRoles.Count > 0)
+            {
+                roles = clsHelper.AvailableRoles[0];
+            }
 
             string authAttribute = (roles.ToLower() == "anonymous")
                 ? "[AllowAnonymous]"

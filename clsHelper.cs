@@ -292,7 +292,7 @@ namespace CodeGenerator
             string webApiWeatherFile = Path.Combine(targetDirectory, "WebAPI", "WeatherForecast.cs");
             string webApiWeatherController = Path.Combine(targetDirectory, "WebAPI", "Controllers", "WeatherForecastController.cs");
 
-            // adding refrences
+            // adding references
             RunDotNetCommand(bllFolder, "add reference ../DAL/DAL.csproj");
             RunDotNetCommand(webApiFolder, "add reference ../BLL/BLL.csproj");
             RunDotNetCommand(dalFolder, "add reference ../Shared/Shared.csproj");
@@ -319,13 +319,16 @@ namespace CodeGenerator
             string controllersFolder = Path.Combine(webApiFolder, "Controllers");
             if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
 
-            // Uppdating Program.cs File
+            // Updating Program.cs File
             string programCsPath = Path.Combine(targetDirectory, "WebAPI", "Program.cs");
 
+            // FIXED: Added System.Linq and Microsoft.AspNetCore.Authorization to support the reflection scanner
             string cleanProgramCode = @"using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using System.Linq;
+using Microsoft.AspNetCore.Authorization;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -374,9 +377,23 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Add authorization services and scan for IAuthorizationHandler implementations
-builder.Services.AddAuthorization();
-builder.Services.AddSingleton<IAuthorizationHandler, BaseBusinessHandler>();
+// Add authorization services
+builder.Services.AddAuthorization(options =>
+{
+    // Register the custom core policy for user resources
+    options.AddPolicy(""UserOwnerOrAdmin"", policy =>
+        policy.Requirements.Add(new WebAPI.Authorization.UserOwnerOrAdminRequirement()));
+});
+
+// FIXED: Native Reflection Scanner to automatically register any generated IAuthorizationHandler smoothly
+var handlerTypes = typeof(Program).Assembly.GetTypes()
+    .Where(t => typeof(IAuthorizationHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+
+foreach (var handler in handlerTypes)
+{
+    builder.Services.AddSingleton(typeof(IAuthorizationHandler), handler);
+}
+
 builder.Services.AddControllers(); 
 
 var app = builder.Build();
@@ -696,33 +713,54 @@ namespace WebAPI.Controllers
             File.WriteAllText(enumPath, enumCode);
             TrackLines(enumCode);
             Console.WriteLine("[Done]");
-
-            // 7. Adding Policies Placeholders to WebAPI
-            string policiesFolder = Path.Combine(_projectDirectory, "WebAPI", "Authorization");
-            if (!Directory.Exists(policiesFolder)) Directory.CreateDirectory(policiesFolder);
+            // 7. Adding Policy-Based Authorization Core Components to WebAPI
+            string authorizationFolder = Path.Combine(_projectDirectory, "WebAPI", "Authorization");
+            if (!Directory.Exists(authorizationFolder)) Directory.CreateDirectory(authorizationFolder);
 
             string requirementCode = @"using Microsoft.AspNetCore.Authorization;
+
 namespace WebAPI.Authorization
 {
-    public class BaseBusinessRequirement : IAuthorizationRequirement { }
+    public class UserOwnerOrAdminRequirement : IAuthorizationRequirement
+    {
+    }
 }";
-            File.WriteAllText(Path.Combine(policiesFolder, "BaseBusinessRequirement.cs"), requirementCode);
+            File.WriteAllText(Path.Combine(authorizationFolder, "UserOwnerOrAdminRequirement.cs"), requirementCode);
 
             string handlerCode = @"using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using System.Threading.Tasks;
+
 namespace WebAPI.Authorization
 {
-    public class BaseBusinessHandler : AuthorizationHandler<BaseBusinessRequirement>
+    public class UserOwnerOrAdminHandler : AuthorizationHandler<UserOwnerOrAdminRequirement, int>
     {
-        protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, BaseBusinessRequirement requirement)
+        protected override Task HandleRequirementAsync(
+            AuthorizationHandlerContext context, 
+            UserOwnerOrAdminRequirement requirement, 
+            int resourceUserId)
         {
-            // Business logic to determine if the requirement is met
-            context.Succeed(requirement);
+            // Admin override (Full Access)
+            if (context.User.IsInRole(""Admin""))
+            {
+                context.Succeed(requirement);
+                return Task.CompletedTask;
+            }
+
+            // Ownership check using dynamic runtime resource comparison
+            var currentUserIdClaim = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (int.TryParse(currentUserIdClaim, out int authenticatedUserId) &&
+                authenticatedUserId == resourceUserId)
+            {
+                context.Succeed(requirement);
+            }
+
             return Task.CompletedTask;
         }
     }
 }";
-            File.WriteAllText(Path.Combine(policiesFolder, "BaseBusinessHandler.cs"), handlerCode);
+            File.WriteAllText(Path.Combine(authorizationFolder, "UserOwnerOrAdminHandler.cs"), handlerCode);
         }
 
         public static void debugThing(object obj)

@@ -82,9 +82,18 @@ namespace CodeGenerator
         // Actual Functions
         public static string getAuthData()
         {
-            clsHelper.Column userID = clsHelper.Columns.Find(c => c.name.ToLower().Contains("userid"));
+            // 1. Get the Primary Key (ID) safely from the first index
+            clsHelper.Column userID = clsHelper.Columns[0];
+
+            // 2. Fetch Hash, Salt, and Role columns dynamically to avoid hardcoded names
             clsHelper.Column hash = clsHelper.Columns.Find(c => c.name.ToLower().Contains("hash"));
             clsHelper.Column salt = clsHelper.Columns.Find(c => c.name.ToLower().Contains("salt"));
+            clsHelper.Column role = clsHelper.Columns.Find(c => c.name.ToLower().Contains("role"));
+
+            // 3. Fallbacks just in case
+            string hashName = (hash.name != null) ? hash.name : "PasswordHash";
+            string saltName = (salt.name != null) ? salt.name : "PasswordSalt";
+            string roleName = (role.name != null) ? role.name : "UserRoleID";
 
             string Function = $@"
         public static async Task<AuthDTO> getHashAndSalt(string Username)
@@ -102,9 +111,9 @@ namespace CodeGenerator
                     return new AuthDTO
                     {{
                         UserID = (reader[""{userID.name}""] == DBNull.Value) ? 0 : (int)reader[""{userID.name}""],
-                        PasswordHash = (reader[""{hash.name}""] == DBNull.Value) ? """" : (string)reader[""{hash.name}""],
-                        PasswordSalt = (reader[""{salt.name}""] == DBNull.Value) ? """" : (string)reader[""{salt.name}""],
-                        Role = (enRoles)((reader[""UserRoleID""] == DBNull.Value) ? 0 : (int)reader[""UserRoleID""])
+                        PasswordHash = (reader[""{hashName}""] == DBNull.Value) ? """" : (string)reader[""{hashName}""],
+                        PasswordSalt = (reader[""{saltName}""] == DBNull.Value) ? """" : (string)reader[""{saltName}""],
+                        UserRoleID = (enRoles)((reader[""{roleName}""] == DBNull.Value) ? 0 : (int)reader[""{roleName}""])
                     }};
                 }}
             }}
