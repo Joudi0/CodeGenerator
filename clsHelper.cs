@@ -374,7 +374,9 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// Add authorization services and scan for IAuthorizationHandler implementations
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IAuthorizationHandler, BaseBusinessHandler>();
 builder.Services.AddControllers(); 
 
 var app = builder.Build();
@@ -534,6 +536,7 @@ namespace Shared
             }
             return tableNames;
         }
+
         public static async Task Auth()
         {
         string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
@@ -693,6 +696,33 @@ namespace WebAPI.Controllers
             File.WriteAllText(enumPath, enumCode);
             TrackLines(enumCode);
             Console.WriteLine("[Done]");
+
+            // 7. Adding Policies Placeholders to WebAPI
+            string policiesFolder = Path.Combine(_projectDirectory, "WebAPI", "Authorization");
+            if (!Directory.Exists(policiesFolder)) Directory.CreateDirectory(policiesFolder);
+
+            string requirementCode = @"using Microsoft.AspNetCore.Authorization;
+namespace WebAPI.Authorization
+{
+    public class BaseBusinessRequirement : IAuthorizationRequirement { }
+}";
+            File.WriteAllText(Path.Combine(policiesFolder, "BaseBusinessRequirement.cs"), requirementCode);
+
+            string handlerCode = @"using Microsoft.AspNetCore.Authorization;
+using System.Threading.Tasks;
+namespace WebAPI.Authorization
+{
+    public class BaseBusinessHandler : AuthorizationHandler<BaseBusinessRequirement>
+    {
+        protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, BaseBusinessRequirement requirement)
+        {
+            // Business logic to determine if the requirement is met
+            context.Succeed(requirement);
+            return Task.CompletedTask;
+        }
+    }
+}";
+            File.WriteAllText(Path.Combine(policiesFolder, "BaseBusinessHandler.cs"), handlerCode);
         }
 
         public static void debugThing(object obj)

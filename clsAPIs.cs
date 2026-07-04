@@ -280,6 +280,13 @@ namespace Shared
 
         public static string addAction(string roles)
         {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            // if is it a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during creation
+            if (isUser && clsHelper.AvailableRoles.Count > 0)
+            {
+                roles = clsHelper.AvailableRoles[0];
+            }
             string authAttribute = (roles.ToLower() == "anonymous")
                 ? "[AllowAnonymous]"
                 : $"[Authorize(Roles = \"{roles}\")]";
@@ -292,7 +299,7 @@ namespace Shared
         /// <returns>An IActionResult containing the created record details and location.</returns>
         /// <response code=""201"">Returns the newly created record along with its location.</response>
         /// <response code=""400"">If the input payload is null or invalid.</response>
-        /// <response code=""500"">If an internal database error occurs during the operation.<///response>
+        /// <response code=""500"">If an internal database error occurs during the operation.</response>
         {authAttribute}
         [HttpPost]
         [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status201Created)]
@@ -303,7 +310,7 @@ namespace Shared
             if (dto == null) return BadRequest(""Invalid data payload."");
             int insertedID = await cls{clsHelper.objectName}.add{clsHelper.objectName}(dto);
             if (insertedID == -1) return StatusCode(500, ""An error occurred while adding the record."");
-            return CreatedAtAction(nameof(GetByID), new {{ id = insertedID }}, dto);
+            return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, dto);
         }}
 ";
         }
