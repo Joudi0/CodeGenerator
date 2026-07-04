@@ -88,77 +88,145 @@ namespace CodeGenerator
 
             isUserTable = (tableName.ToLower() == "user" || tableName.ToLower() == "users");
 
-            if (isUserTable)
-            {
-                AnsiConsole.MarkupLine("[yellow]-> Detecting User Table! Generating JWT Authentication Logic...[/]");
-
-                // Injecting core Authentication components
-                clsHelper.allSPs.Add(clsSPs.loginSP());
-                DALFuncs.Append(clsDAL.getAuthData());
-                BLLFuncs.Append(clsBLL.checkLogin());
-
-                // FIX: Injecting the missing dynamic RegisterUser method into BLLFuncs
-                BLLFuncs.Append(clsBLL.registerUser());
-
-                // Force Add functionality for User table since RegisterUser depends on it explicitly
-                clsHelper.allSPs.Add(clsSPs.addSP());
-                DALFuncs.Append(clsDAL.addFunc());
-                BLLFuncs.Append(clsBLL.addFunc());
-            }
-
             Console.Write($"\nEnter The Class Name For {tableName} (cls First will be added on it): ");
             clsHelper.objectName = Console.ReadLine();
             clsHelper.className = "cls" + clsHelper.objectName;
-            string answer = "yes";
 
             clsHelper.mappedColumns = clsHelper.mappingTheColumns();
             clsHelper.ColumnsForCsharp = clsHelper.getColumnsForCsharp();
-            Console.Write("\nFor DAL, BLL, And Stored Procedures:\n");
 
-            // Get By:
-            List<string> getByColumns = clsPresentation.getBy();
-            foreach (string colName in getByColumns)
+            // =========================================================
+            // 1.  Dectatoric way for User Table (Auto Generate All Actions)
+            // =========================================================
+            if (isUserTable)
             {
-                clsHelper.Column column = clsHelper.makeColumnByName(colName);
-                clsHelper.allSPs.Add(clsSPs.selectByColumnSP(column));
-                DALFuncs.Append(clsDAL.getRecordByColumnFunc(column));
-                BLLFuncs.Append(clsBLL.getByFunc(column));
-                BLLFuncs.Append(clsBLL.getBriefFunc(column));
+                AnsiConsole.MarkupLine("[yellow]-> Detecting User Table! Automatically generating complete secure infrastructure...[/]");
 
-                string getByRoles = clsPresentation.PromptForActionRoles($"GetBy{colName}");
-                Controller.Append(clsAPIs.getByAction(column, getByRoles));
-            }
+                // Basic Authentication and Authorization (Login and Register)
+                clsHelper.allSPs.Add(clsSPs.loginSP());
+                DALFuncs.Append(clsDAL.getAuthData());
+                BLLFuncs.Append(clsBLL.checkLogin());
+                BLLFuncs.Append(clsBLL.registerUser());
 
-            // Update:
-            Console.Write("update? yes/no: ");
-            answer = Console.ReadLine();
-            if (answer.ToLower() == "yes" || answer.ToLower() == "y")
-            {
+                // Add Forced for User Table
+                clsHelper.allSPs.Add(clsSPs.addSP());
+                DALFuncs.Append(clsDAL.addFunc());
+                BLLFuncs.Append(clsBLL.addFunc());
+                string addRoles = clsHelper.AvailableRoles.Count > 0 ? clsHelper.AvailableRoles[0] : "Admin";
+                Controller.Append(clsAPIs.addAction(addRoles));
+
+                // Forced GetByID method for User table with dynamic Ownership Policy
+                clsHelper.Column idColumn = clsHelper.Columns[0];
+                clsHelper.allSPs.Add(clsSPs.selectByColumnSP(idColumn));
+                DALFuncs.Append(clsDAL.getRecordByColumnFunc(idColumn));
+                BLLFuncs.Append(clsBLL.getByFunc(idColumn));
+                BLLFuncs.Append(clsBLL.getBriefFunc(idColumn));
+                Controller.Append(clsAPIs.getByAction(idColumn, "Admin"));
+
+                // Forced GetByUsername method for User table restricted to Admin role
+                clsHelper.Column usernameColumn = clsHelper.Columns.Find(c => c.name.ToLower().Contains("username"));
+
+                // Fallback logic to look up alternative user column names if the exact 'username' is missing
+                // Checked via .name property because Column is a struct and cannot be compared to null directly
+                if (string.IsNullOrEmpty(usernameColumn.name))
+                {
+                    usernameColumn = clsHelper.Columns.Find(c => c.name.ToLower().Contains("user")
+                        && !c.name.ToLower().Contains("id")
+                        && !c.name.ToLower().Contains("role"));
+                }
+
+                // Generate complete infrastructure if a valid username column is identified
+                if (!string.IsNullOrEmpty(usernameColumn.name))
+                {
+                    clsHelper.allSPs.Add(clsSPs.selectByColumnSP(usernameColumn));
+                    DALFuncs.Append(clsDAL.getRecordByColumnFunc(usernameColumn));
+                    BLLFuncs.Append(clsBLL.getByFunc(usernameColumn));
+                    BLLFuncs.Append(clsBLL.getBriefFunc(usernameColumn));
+                    Controller.Append(clsAPIs.getByAction(usernameColumn, "Admin"));
+                }
+
+                // Update is forced for user table and ownership policy
                 clsHelper.allSPs.Add(clsSPs.updateSP());
                 DALFuncs.Append(clsDAL.updateFunc());
                 BLLFuncs.Append(clsBLL.updateFunc());
+                Controller.Append(clsAPIs.updateAction("Admin"));
 
-                string updateRoles = clsPresentation.PromptForActionRoles("Update");
-                Controller.Append(clsAPIs.updateAction(updateRoles));
-            }
-
-            // Delete:
-            Console.Write("delete? yes/no: ");
-            answer = Console.ReadLine();
-            if (answer.ToLower() == "yes" || answer.ToLower() == "y")
-            {
-                clsHelper.Column C = clsHelper.mappedColumns[0];
+                // Delete Forced for user table and Admin only
                 clsHelper.allSPs.Add(clsSPs.deleteSP());
-                DALFuncs.Append(clsDAL.deleteFunc(C));
-                BLLFuncs.Append(clsBLL.deleteFunc(C));
+                DALFuncs.Append(clsDAL.deleteFunc(idColumn));
+                BLLFuncs.Append(clsBLL.deleteFunc(idColumn));
+                Controller.Append(clsAPIs.deleteAction(idColumn, "Admin"));
 
-                string deleteRoles = clsPresentation.PromptForActionRoles("Delete");
-                Controller.Append(clsAPIs.deleteAction(C, deleteRoles));
+                // IsExists Forced for user table and Admin only and Ownership policy
+                clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(idColumn));
+                DALFuncs.Append(clsDAL.isExistsFunc(idColumn));
+                BLLFuncs.Append(clsBLL.isExistsFunc(idColumn));
+                Controller.Append(clsAPIs.isExistAction(idColumn, "Admin"));
+
+                // Paging Forced for user table and Admin only
+                clsHelper.allSPs.Add(clsSPs.PagingSP());
+                DALFuncs.Append(clsDAL.PagingFunc());
+                BLLFuncs.Append(clsBLL.PagingFunc());
+                Controller.Append(clsAPIs.pagingAction("Admin"));
+
+                // getAll Forced for user table and Admin only
+                DALFuncs.Append(clsDAL.getAllFunc());
+                BLLFuncs.Append(clsBLL.getAllBriefByFunc(idColumn));
+                BLLFuncs.Append(clsBLL.getAllFullByFunc(idColumn));
+                Controller.Append(clsAPIs.getAllBriefByAction(idColumn, "Admin"));
+                Controller.Append(clsAPIs.getAllFullByAction(idColumn, "Admin"));
+                clsHelper.allSPs.Add(clsSPs.selectAllSP());
             }
-
-            // Add (Skipped prompt if it's a User table since we already forced it above)
-            if (!isUserTable)
+            // =========================================================
+            // 2. Democratic way for all other tables (ask user for each action)
+            // =========================================================
+            else
             {
+                string answer = "yes";
+                Console.Write("\nFor DAL, BLL, And Stored Procedures:\n");
+
+                // Get By:
+                List<string> getByColumns = clsPresentation.getBy();
+                foreach (string colName in getByColumns)
+                {
+                    clsHelper.Column column = clsHelper.makeColumnByName(colName);
+                    clsHelper.allSPs.Add(clsSPs.selectByColumnSP(column));
+                    DALFuncs.Append(clsDAL.getRecordByColumnFunc(column));
+                    BLLFuncs.Append(clsBLL.getByFunc(column));
+                    BLLFuncs.Append(clsBLL.getBriefFunc(column));
+
+                    string getByRoles = clsPresentation.PromptForActionRoles($"GetBy{colName}");
+                    Controller.Append(clsAPIs.getByAction(column, getByRoles));
+                }
+
+                // Update:
+                Console.Write("update? yes/no: ");
+                answer = Console.ReadLine();
+                if (answer.ToLower() == "yes" || answer.ToLower() == "y")
+                {
+                    clsHelper.allSPs.Add(clsSPs.updateSP());
+                    DALFuncs.Append(clsDAL.updateFunc());
+                    BLLFuncs.Append(clsBLL.updateFunc());
+
+                    string updateRoles = clsPresentation.PromptForActionRoles("Update");
+                    Controller.Append(clsAPIs.updateAction(updateRoles));
+                }
+
+                // Delete:
+                Console.Write("delete? yes/no: ");
+                answer = Console.ReadLine();
+                if (answer.ToLower() == "yes" || answer.ToLower() == "y")
+                {
+                    clsHelper.Column C = clsHelper.mappedColumns[0];
+                    clsHelper.allSPs.Add(clsSPs.deleteSP());
+                    DALFuncs.Append(clsDAL.deleteFunc(C));
+                    BLLFuncs.Append(clsBLL.deleteFunc(C));
+
+                    string deleteRoles = clsPresentation.PromptForActionRoles("Delete");
+                    Controller.Append(clsAPIs.deleteAction(C, deleteRoles));
+                }
+
+                // Add:
                 Console.Write("add? yes/no: ");
                 answer = Console.ReadLine();
                 if (answer.ToLower() == "yes" || answer.ToLower() == "y")
@@ -170,79 +238,72 @@ namespace CodeGenerator
                     string addRoles = clsPresentation.PromptForActionRoles("Add");
                     Controller.Append(clsAPIs.addAction(addRoles));
                 }
-            }
-            else
-            {
-                // Still prompt for roles configuration for the Add Controller action even if backend logic was forced
-                string addRoles = clsPresentation.PromptForActionRoles("Add");
-                Controller.Append(clsAPIs.addAction(addRoles));
-            }
 
-            // isExist:
-            Console.Write("isExist? yes/no: ");
-            answer = Console.ReadLine();
-            if (answer.ToLower() == "yes" || answer.ToLower() == "y")
-            {
-                List<string> Columns = clsPresentation.existBy();
-                foreach (string colName in Columns)
-                {
-                    clsHelper.Column column = clsHelper.makeColumnByName(colName);
-
-                    clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(column));
-                    DALFuncs.Append(clsDAL.isExistsFunc(column));
-                    BLLFuncs.Append(clsBLL.isExistsFunc(column));
-
-                    string existRoles = clsPresentation.PromptForActionRoles($"ExistsBy{colName}");
-                    Controller.Append(clsAPIs.isExistAction(column, existRoles));
-                }
-            }
-
-            // Paging:
-            Console.Write("Paging? yes/no: ");
-            answer = Console.ReadLine();
-            if (answer.ToLower() == "yes" || answer.ToLower() == "y")
-            {
-                clsHelper.allSPs.Add(clsSPs.PagingSP());
-                DALFuncs.Append(clsDAL.PagingFunc());
-                BLLFuncs.Append(clsBLL.PagingFunc());
-
-                string pagingRoles = clsPresentation.PromptForActionRoles("GetPage (Paging)");
-                Controller.Append(clsAPIs.pagingAction(pagingRoles));
-            }
-
-            // getAll:
-            Console.Write("getAll? yes/no: ");
-            answer = Console.ReadLine();
-            if (answer.ToLower() == "yes" || answer.ToLower() == "y")
-            {
-                clsHelper.Column firstColumn = clsHelper.ColumnsForCsharp[0];
-                DALFuncs.Append(clsDAL.getAllFunc());
-
-                BLLFuncs.Append(clsBLL.getAllBriefByFunc(firstColumn));
-                BLLFuncs.Append(clsBLL.getAllFullByFunc(firstColumn));
-
-                string getAllRoles = clsPresentation.PromptForActionRoles("GetAll");
-                Controller.Append(clsAPIs.getAllBriefByAction(firstColumn, getAllRoles));
-                Controller.Append(clsAPIs.getAllFullByAction(firstColumn, getAllRoles));
-
-                clsHelper.allSPs.Add(clsSPs.selectAllSP());
-                Console.Write("GetAll Method Generated, do you want 'GetAll By' ? (yes/no): ");
+                // isExist:
+                Console.Write("isExist? yes/no: ");
                 answer = Console.ReadLine();
                 if (answer.ToLower() == "yes" || answer.ToLower() == "y")
                 {
-                    List<string> Columns = clsPresentation.getAllBy();
+                    List<string> Columns = clsPresentation.existBy();
                     foreach (string colName in Columns)
                     {
                         clsHelper.Column column = clsHelper.makeColumnByName(colName);
-                        clsHelper.allSPs.Add(clsSPs.selectAllBySP(column));
-                        DALFuncs.Append(clsDAL.getAllByColumnFunc(column));
+                        clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(column));
+                        DALFuncs.Append(clsDAL.isExistsFunc(column));
+                        BLLFuncs.Append(clsBLL.isExistsFunc(column));
 
-                        BLLFuncs.Append(clsBLL.getAllBriefByFunc(column));
-                        BLLFuncs.Append(clsBLL.getAllFullByFunc(column));
+                        string existRoles = clsPresentation.PromptForActionRoles($"ExistsBy{colName}");
+                        Controller.Append(clsAPIs.isExistAction(column, existRoles));
+                    }
+                }
 
-                        string getAllByRoles = clsPresentation.PromptForActionRoles($"GetAllBy{colName}");
-                        Controller.Append(clsAPIs.getAllBriefByAction(column, getAllByRoles));
-                        Controller.Append(clsAPIs.getAllFullByAction(column, getAllByRoles));
+                // Paging:
+                Console.Write("Paging? yes/no: ");
+                answer = Console.ReadLine();
+                if (answer.ToLower() == "yes" || answer.ToLower() == "y")
+                {
+                    clsHelper.allSPs.Add(clsSPs.PagingSP());
+                    DALFuncs.Append(clsDAL.PagingFunc());
+                    BLLFuncs.Append(clsBLL.PagingFunc());
+
+                    string pagingRoles = clsPresentation.PromptForActionRoles("GetPage (Paging)");
+                    Controller.Append(clsAPIs.pagingAction(pagingRoles));
+                }
+
+                // getAll:
+                Console.Write("getAll? yes/no: ");
+                answer = Console.ReadLine();
+                if (answer.ToLower() == "yes" || answer.ToLower() == "y")
+                {
+                    clsHelper.Column firstColumn = clsHelper.ColumnsForCsharp[0];
+                    DALFuncs.Append(clsDAL.getAllFunc());
+
+                    BLLFuncs.Append(clsBLL.getAllBriefByFunc(firstColumn));
+                    BLLFuncs.Append(clsBLL.getAllFullByFunc(firstColumn));
+
+                    string getAllRoles = clsPresentation.PromptForActionRoles("GetAll");
+                    Controller.Append(clsAPIs.getAllBriefByAction(firstColumn, getAllRoles));
+                    Controller.Append(clsAPIs.getAllFullByAction(firstColumn, getAllRoles));
+
+                    clsHelper.allSPs.Add(clsSPs.selectAllSP());
+                    Console.Write("GetAll Method Generated, do you want 'GetAll By' ? (yes/no): ");
+                    answer = Console.ReadLine();
+                    if (answer.ToLower() == "yes" || answer.ToLower() == "y")
+                    {
+                        List<string> Columns = clsPresentation.getAllBy();
+                        foreach (string colName in Columns)
+                        {
+                            clsHelper.Column column = clsHelper.makeColumnByName(colName);
+                            clsHelper.allSPs.Add(clsSPs.selectAllBySP(column));
+                            DALFuncs.Append(clsDAL.getAllByColumnFunc(column));
+
+                            BLLFuncs.Append(clsBLL.getAllBriefByFunc(column));
+                            BLLFuncs.Append(clsBLL.getAllFullByFunc(column));
+
+                            string getAllByRoles = clsPresentation.PromptForActionRoles($"GetAllBy{colName}");
+                            Controller.Append(clsAPIs.getAllBriefByAction(column, getAllByRoles));
+                            Controller.Append(clsAPIs.getAllFullByAction(column, getAllByRoles));
+                        }
                     }
                 }
             }
