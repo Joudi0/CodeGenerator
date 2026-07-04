@@ -295,7 +295,6 @@ namespace Shared
 
             string ownershipCheck = "";
             string serviceInjection = "";
-            string passwordUpdateLogic = "";
 
             if (isUser)
             {
@@ -307,24 +306,6 @@ namespace Shared
             // Centralized Policy-Based Resource Authorization Check
             var authResult = await authorizationService.AuthorizeAsync(User, dto.{idFieldName}, ""UserOwnerOrAdmin"");
             if (!authResult.Succeeded) return Forbid();
-";
-
-                // 2. Dynamic password hashing in case the admin/user wants to change their password during update
-                var hashColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("hash"));
-                var saltColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("salt"));
-
-                string hashName = (hashColumn.name != null) ? hashColumn.name : "PasswordHash";
-                string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
-
-                passwordUpdateLogic = $@"
-            // If a new password is provided during update, re-hash it and update the security fields.
-            // Otherwise, keep the existing hash and salt intact.
-            if (!string.IsNullOrEmpty(dto.Password))
-            {{
-                string salt = clsSecurityHelper.GenerateSalt();
-                dto.{saltName} = salt;
-                dto.{hashName} = clsSecurityHelper.ComputeHash(dto.Password, salt);
-            }}
 ";
             }
 
@@ -344,10 +325,47 @@ namespace Shared
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Update([FromBody] {clsHelper.className}FullDTO dto{serviceInjection})
         {{
-            if (dto == null) return BadRequest(""Invalid data payload."");{ownershipCheck}{passwordUpdateLogic}
+            if (dto == null) return BadRequest(""Invalid data payload."");{ownershipCheck}
             bool isUpdated = await cls{clsHelper.objectName}.update{clsHelper.objectName}(dto);
             if (!isUpdated) return NotFound($""{clsHelper.objectName} update failed or record not found."");
             return Ok(""Updated successfully."");
+        }}
+";
+        }
+
+        public static string addAction(string roles)
+        {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+
+            // if is it a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during creation
+            if (isUser && clsHelper.AvailableRoles.Count > 0)
+            {
+                roles = clsHelper.AvailableRoles[0];
+            }
+            string authAttribute = (roles.ToLower() == "anonymous")
+                ? "[AllowAnonymous]"
+                : $"[Authorize(Roles = \"{roles}\")]";
+
+            return $@"
+        /// <summary>
+        /// Adds a new record to the database.
+        /// </summary>
+        /// <param name=""dto"">The full data transfer object for creation.</param>
+        /// <returns>An IActionResult containing the created record details and location.</returns>
+        /// <response code=""201"">Returns the newly created record along with its location.</response>
+        /// <response code=""400"">If the input payload is null or invalid.</response>
+        /// <response code=""500"">If an internal database error occurs during the operation.</response>
+        {authAttribute}
+        [HttpPost]
+        [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> Add([FromBody] {clsHelper.className}FullDTO dto)
+        {{
+            if (dto == null) return BadRequest(""Invalid data payload."");
+            int insertedID = await cls{clsHelper.objectName}.add{clsHelper.objectName}(dto);
+            if (insertedID == -1) return StatusCode(500, ""An error occurred while adding the record."");
+            return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, dto);
         }}
 ";
         }
@@ -395,67 +413,7 @@ namespace Shared
 ";
         }
 
-        public static string addAction(string roles)
-        {
-            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-
-            // if is it a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during creation
-            if (isUser && clsHelper.AvailableRoles.Count > 0)
-            {
-                roles = clsHelper.AvailableRoles[0];
-            }
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
-
-            string passwordHashingLogic = "";
-            if (isUser)
-            {
-                // بنشيك ديناميكياً على الاسم الحقيقي للعمودين متل ما هني بالداتابيز كرمال نمنع أي تضارب بالتسمية
-                var hashColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("hash"));
-                var saltColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("salt"));
-
-                string hashName = (hashColumn.name != null) ? hashColumn.name : "PasswordHash";
-                string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
-
-                passwordHashingLogic = $@"
-            // Automatically generate secure hash and salt for the new user record
-            if (!string.IsNullOrEmpty(dto.Password))
-            {{
-                string salt = clsSecurityHelper.GenerateSalt();
-                dto.{saltName} = salt;
-                dto.{hashName} = clsSecurityHelper.ComputeHash(dto.Password, salt);
-            }}
-            else
-            {{
-                return BadRequest(""Password is required for creating a new user."");
-            }}
-";
-            }
-
-            return $@"
-        /// <summary>
-        /// Adds a new record to the database.
-        /// </summary>
-        /// <param name=""dto"">The full data transfer object for creation.</param>
-        /// <returns>An IActionResult containing the created record details and location.</returns>
-        /// <response code=""201"">Returns the newly created record along with its location.</response>
-        /// <response code=""400"">If the input payload is null or invalid.</response>
-        /// <response code=""500"">If an internal database error occurs during the operation.</response>
-        {authAttribute}
-        [HttpPost]
-        [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status201Created)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> Add([FromBody] {clsHelper.className}FullDTO dto)
-        {{
-            if (dto == null) return BadRequest(""Invalid data payload."");{passwordHashingLogic}
-            int insertedID = await cls{clsHelper.objectName}.add{clsHelper.objectName}(dto);
-            if (insertedID == -1) return StatusCode(500, ""An error occurred while adding the record."");
-            return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, dto);
-        }}
-";
-        }
+       
 
         public static string isExistAction(clsHelper.Column C, string roles)
         {

@@ -223,13 +223,26 @@ namespace CodeGenerator
 
         public static string loginSP()
         {
-            // Assuming the table has columns for Username, PasswordHash, and PasswordSalt
+            clsHelper.Column userID = clsHelper.Columns[0];
+            clsHelper.Column hash = clsHelper.Columns.Find(c => c.name.ToLower().Contains("hash"));
+            clsHelper.Column salt = clsHelper.Columns.Find(c => c.name.ToLower().Contains("salt"));
+            clsHelper.Column role = clsHelper.Columns.Find(c => c.name.ToLower().Contains("role"));
+
+            //  Dynamically find the username column by looking for a column that contains "user" but does not contain "id" or "role"
+            clsHelper.Column username = clsHelper.Columns.Find(c => c.name.ToLower().Contains("user") && !c.name.ToLower().Contains("id") && !c.name.ToLower().Contains("role"));
+
+            string hashName = (hash.name != null) ? hash.name : "PasswordHash";
+            string saltName = (salt.name != null) ? salt.name : "PasswordSalt";
+            string roleName = (role.name != null) ? role.name : "UserRoleID";
+            string userNameCol = (username.name != null) ? username.name : "Username";
+
             string SP = $@"
     CREATE PROCEDURE [dbo].[SP_{clsHelper.tableName}_GetSecurityDataByUsername]
-            @Username NVARCHAR(150)
+            @{userNameCol} NVARCHAR(150)
     AS
     BEGIN
-        SELECT UserID, PasswordHash, PasswordSalt, UserRoleID FROM {clsHelper.tableName} WHERE Username = @Username;
+        SELECT {userID.name}, {hashName}, {saltName}, {roleName} FROM {clsHelper.tableName} 
+        WHERE {userNameCol} = @{userNameCol};
     END
     ";
             return SP;

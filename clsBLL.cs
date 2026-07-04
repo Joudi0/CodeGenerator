@@ -180,20 +180,83 @@ namespace CodeGenerator
 
         public static string addFunc()
         {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string passwordHashingLogic = "";
+
+            if (isUser)
+            {
+                clsHelper.Column hashColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("hash"));
+                clsHelper.Column saltColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("salt"));
+
+                string hashName = (hashColumn.name != null) ? hashColumn.name : "PasswordHash";
+                string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
+
+                passwordHashingLogic = $@"
+            // Business Logic: Automatically generate secure hash and salt for the new user record
+            if (!string.IsNullOrEmpty(dto.Password))
+            {{
+                string salt = Shared.clsSecurityHelper.GenerateSalt();
+                dto.{saltName} = salt;
+                dto.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
+            }}
+            else
+            {{
+                // In a real scenario, you might want to throw an exception here, 
+                // but since the Controller checks it, returning -1 is a safe fallback.
+                return -1;
+            }}
+";
+            }
+
             return $@"
         public static Task<int> add{clsHelper.objectName}({clsHelper.className}FullDTO dto)
-        {{
+        {{{passwordHashingLogic}
             return {DALName}.add{clsHelper.objectName}(dto);
-        }}";
+        }}
+";
         }
 
         public static string updateFunc()
         {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string passwordUpdateLogic = "";
+
+            if (isUser)
+            {
+                string idFieldName = clsHelper.ColumnsForCsharp[0].name;
+                clsHelper.Column hashColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("hash"));
+                clsHelper.Column saltColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("salt"));
+
+                string hashName = (hashColumn.name != null) ? hashColumn.name : "PasswordHash";
+                string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
+
+                passwordUpdateLogic = $@"
+            // Business Logic: If a new password is provided, re-hash it.
+            // Otherwise, fetch the existing hash and salt to prevent data loss.
+            if (!string.IsNullOrEmpty(dto.Password))
+            {{
+                string salt = Shared.clsSecurityHelper.GenerateSalt();
+                dto.{saltName} = salt;
+                dto.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
+            }}
+            else
+            {{
+                var existingUser = await get{clsHelper.objectName}ByID(dto.{idFieldName});
+                if(existingUser != null)
+                {{
+                    dto.{hashName} = existingUser.{hashName};
+                    dto.{saltName} = existingUser.{saltName};
+                }}
+            }}
+";
+            }
+
             return $@"
-        public static Task<bool> update{clsHelper.objectName}({clsHelper.className}FullDTO dto)
-        {{
-            return {DALName}.update{clsHelper.objectName}(dto);
-        }}";
+        public static async Task<bool> update{clsHelper.objectName}({clsHelper.className}FullDTO dto)
+        {{{passwordUpdateLogic}
+            return await {DALName}.update{clsHelper.objectName}(dto);
+        }}
+";
         }
 
         public static string deleteFunc(clsHelper.Column C)

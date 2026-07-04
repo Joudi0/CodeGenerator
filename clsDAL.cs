@@ -91,9 +91,11 @@ namespace CodeGenerator
             clsHelper.Column role = clsHelper.Columns.Find(c => c.name.ToLower().Contains("role"));
 
             // 3. Fallbacks just in case
+            clsHelper.Column username = clsHelper.Columns.Find(c => c.name.ToLower().Contains("user") && !c.name.ToLower().Contains("id") && !c.name.ToLower().Contains("role"));
             string hashName = (hash.name != null) ? hash.name : "PasswordHash";
             string saltName = (salt.name != null) ? salt.name : "PasswordSalt";
             string roleName = (role.name != null) ? role.name : "UserRoleID";
+            string userNameCol = (username.name != null) ? username.name : "Username";
 
             string Function = $@"
         public static async Task<AuthDTO> getHashAndSalt(string Username)
@@ -101,7 +103,7 @@ namespace CodeGenerator
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_GetSecurityDataByUsername"", connection);
             command.CommandType = CommandType.StoredProcedure;
-            command.Parameters.AddWithValue(""@Username"", Username);
+            command.Parameters.AddWithValue(""@{userNameCol}"", Username);
             try
             {{
                 await connection.OpenAsync();
