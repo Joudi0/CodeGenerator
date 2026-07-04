@@ -653,7 +653,6 @@ namespace WebAPI.Controllers
 {authActions}
     }}
 }}";
-
             File.WriteAllText(authControllerPath, fullAuthControllerCode);
             TrackLines(fullAuthControllerCode);
 

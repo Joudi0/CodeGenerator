@@ -46,12 +46,27 @@ namespace CodeGenerator
             return Properties;
         }
 
+        public static List<string> blackList = new List<string>
+{ 
+    // Authentication & Cryptography
+    "password", "pass", "pwd", "passwd",
+    "passwordhash", "password_hash", "passwordsalt", "password_salt",
+    "secret", "privatekey", "private_key", "publickey", "public_key",
+    "key", "iv", "apikey", "api_key",
+    "token", "authtoken", "auth_token", "refreshtoken", "refresh_token",
+    "sessionid", "session_id", "pin", "pincode",
 
-        public static List<string> blackList = new List<string> { "password",
-        "ip", "secret", "salary", "balance", "privatekey",
-        "passwordhash", "password_hash", "passwordsalt", "password_salt", "secret"
-        };
+    // Financial & Sensitive Data
+    "salary", "balance", "income", "revenue",
+    "creditcard", "credit_card", "cvv", "cvc",
+    "cardnumber", "card_number", "bankaccount", "bank_account",
 
+    // Infrastructure & Device Info
+    "ip", "ipaddress", "ip_address", "mac", "macaddress", "mac_address",
+
+    // Personal Identifiers
+    "ssn", "nationalid", "national_id", "passport", "passportnumber", "passport_number"
+};
         public static string BriefDTO()
         {
             string DTO = $@"
@@ -98,7 +113,7 @@ namespace Shared
         public int UserID {{ get; set; }}
         public string PasswordHash {{ get; set; }}
         public string PasswordSalt {{ get; set; }}
-        public string RoleName {{ get; set; }}
+        public enRole UserRoleID {{ get; set; }}
     }}
 }}
 ";
@@ -117,6 +132,10 @@ namespace Shared
             {
                 // Skip cryptographic fields as they are generated on the server side, not sent by the client
                 if (col.name.ToLower().Contains("hash") || col.name.ToLower().Contains("salt"))
+                    continue;
+
+                // NEW: Skip the role column to prevent Mass Assignment vulnerability
+                if (col.name.ToLower().Contains("roleid") || col.name.ToLower().Contains("role"))
                     continue;
 
                 dtoProperties.AppendLine($"        public {col.type} {col.name} {{ get; set; }}");
@@ -167,7 +186,7 @@ namespace Shared
                 return Unauthorized(""Invalid username or password."");
 
             // Generate the final secure token using the injected tokenService parameters
-            var token = tokenService.GenerateJWTToken(authData.UserID, loginDto.Username, authData.RoleName);
+            var token = tokenService.GenerateJWTToken(authData.UserID, loginDto.Username, authData.Role.ToString());    
 
             return Ok(new {{ Token = token }});
         }}

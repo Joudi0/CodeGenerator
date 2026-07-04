@@ -101,11 +101,10 @@ namespace CodeGenerator
                 {{
                     return new AuthDTO
                     {{
-                        // Property names are hardcoded, database column names are dynamically retrieved
                         UserID = (reader[""{userID.name}""] == DBNull.Value) ? 0 : (int)reader[""{userID.name}""],
                         PasswordHash = (reader[""{hash.name}""] == DBNull.Value) ? """" : (string)reader[""{hash.name}""],
                         PasswordSalt = (reader[""{salt.name}""] == DBNull.Value) ? """" : (string)reader[""{salt.name}""],
-                        RoleName = (reader[""RoleName""] == DBNull.Value) ? """" : (string)reader[""RoleName""]
+                        Role = (enRoles)((reader[""UserRoleID""] == DBNull.Value) ? 0 : (int)reader[""UserRoleID""])
                     }};
                 }}
             }}

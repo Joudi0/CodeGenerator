@@ -229,7 +229,7 @@ namespace CodeGenerator
             @Username NVARCHAR(150)
     AS
     BEGIN
-        SELECT UserID, PasswordHash, PasswordSalt, RoleName FROM {clsHelper.tableName} INNER  JOIN Roles ON {clsHelper.tableName}.RoleID = Roles.RoleID  WHERE Username = @Username;
+        SELECT UserID, PasswordHash, PasswordSalt, UserRoleID FROM {clsHelper.tableName} WHERE Username = @Username;
     END
     ";
             return SP;

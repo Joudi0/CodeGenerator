@@ -71,7 +71,6 @@ namespace CodeGenerator
         }
 
         static bool isUserTable = false;
-
         public static async Task Run(string tableName)
         {
             clsHelper.tableName = tableName;
@@ -93,9 +92,18 @@ namespace CodeGenerator
             {
                 AnsiConsole.MarkupLine("[yellow]-> Detecting User Table! Generating JWT Authentication Logic...[/]");
 
+                // Injecting core Authentication components
                 clsHelper.allSPs.Add(clsSPs.loginSP());
                 DALFuncs.Append(clsDAL.getAuthData());
                 BLLFuncs.Append(clsBLL.checkLogin());
+
+                // FIX: Injecting the missing dynamic RegisterUser method into BLLFuncs
+                BLLFuncs.Append(clsBLL.registerUser());
+
+                // Force Add functionality for User table since RegisterUser depends on it explicitly
+                clsHelper.allSPs.Add(clsSPs.addSP());
+                DALFuncs.Append(clsDAL.addFunc());
+                BLLFuncs.Append(clsBLL.addFunc());
             }
 
             Console.Write($"\nEnter The Class Name For {tableName} (cls First will be added on it): ");
@@ -117,7 +125,6 @@ namespace CodeGenerator
                 BLLFuncs.Append(clsBLL.getByFunc(column));
                 BLLFuncs.Append(clsBLL.getBriefFunc(column));
 
-                // Prompt console for allowed roles for this GetBy action and pass them to the Controller
                 string getByRoles = clsPresentation.PromptForActionRoles($"GetBy{colName}");
                 Controller.Append(clsAPIs.getByAction(column, getByRoles));
             }
@@ -131,7 +138,6 @@ namespace CodeGenerator
                 DALFuncs.Append(clsDAL.updateFunc());
                 BLLFuncs.Append(clsBLL.updateFunc());
 
-                // Prompt console for Update action roles
                 string updateRoles = clsPresentation.PromptForActionRoles("Update");
                 Controller.Append(clsAPIs.updateAction(updateRoles));
             }
@@ -146,21 +152,28 @@ namespace CodeGenerator
                 DALFuncs.Append(clsDAL.deleteFunc(C));
                 BLLFuncs.Append(clsBLL.deleteFunc(C));
 
-                // Prompt console for Delete action roles
                 string deleteRoles = clsPresentation.PromptForActionRoles("Delete");
                 Controller.Append(clsAPIs.deleteAction(C, deleteRoles));
             }
 
-            // Add:
-            Console.Write("add? yes/no: ");
-            answer = Console.ReadLine();
-            if (answer.ToLower() == "yes" || answer.ToLower() == "y")
+            // Add (Skipped prompt if it's a User table since we already forced it above)
+            if (!isUserTable)
             {
-                clsHelper.allSPs.Add(clsSPs.addSP());
-                DALFuncs.Append(clsDAL.addFunc());
-                BLLFuncs.Append(clsBLL.addFunc());
+                Console.Write("add? yes/no: ");
+                answer = Console.ReadLine();
+                if (answer.ToLower() == "yes" || answer.ToLower() == "y")
+                {
+                    clsHelper.allSPs.Add(clsSPs.addSP());
+                    DALFuncs.Append(clsDAL.addFunc());
+                    BLLFuncs.Append(clsBLL.addFunc());
 
-                // Prompt console for Add action roles
+                    string addRoles = clsPresentation.PromptForActionRoles("Add");
+                    Controller.Append(clsAPIs.addAction(addRoles));
+                }
+            }
+            else
+            {
+                // Still prompt for roles configuration for the Add Controller action even if backend logic was forced
                 string addRoles = clsPresentation.PromptForActionRoles("Add");
                 Controller.Append(clsAPIs.addAction(addRoles));
             }
@@ -179,7 +192,6 @@ namespace CodeGenerator
                     DALFuncs.Append(clsDAL.isExistsFunc(column));
                     BLLFuncs.Append(clsBLL.isExistsFunc(column));
 
-                    // Prompt console for IsExist action roles
                     string existRoles = clsPresentation.PromptForActionRoles($"ExistsBy{colName}");
                     Controller.Append(clsAPIs.isExistAction(column, existRoles));
                 }
@@ -194,7 +206,6 @@ namespace CodeGenerator
                 DALFuncs.Append(clsDAL.PagingFunc());
                 BLLFuncs.Append(clsBLL.PagingFunc());
 
-                // Prompt console for Paging action roles
                 string pagingRoles = clsPresentation.PromptForActionRoles("GetPage (Paging)");
                 Controller.Append(clsAPIs.pagingAction(pagingRoles));
             }
@@ -210,7 +221,6 @@ namespace CodeGenerator
                 BLLFuncs.Append(clsBLL.getAllBriefByFunc(firstColumn));
                 BLLFuncs.Append(clsBLL.getAllFullByFunc(firstColumn));
 
-                // Prompt console for base GetAll action roles
                 string getAllRoles = clsPresentation.PromptForActionRoles("GetAll");
                 Controller.Append(clsAPIs.getAllBriefByAction(firstColumn, getAllRoles));
                 Controller.Append(clsAPIs.getAllFullByAction(firstColumn, getAllRoles));
@@ -230,7 +240,6 @@ namespace CodeGenerator
                         BLLFuncs.Append(clsBLL.getAllBriefByFunc(column));
                         BLLFuncs.Append(clsBLL.getAllFullByFunc(column));
 
-                        // Prompt console for GetAllBy roles for each selected column
                         string getAllByRoles = clsPresentation.PromptForActionRoles($"GetAllBy{colName}");
                         Controller.Append(clsAPIs.getAllBriefByAction(column, getAllByRoles));
                         Controller.Append(clsAPIs.getAllFullByAction(column, getAllByRoles));

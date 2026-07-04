@@ -151,7 +151,7 @@ namespace CodeGenerator
                     continue;
                 }
 
-                if (col.name.ToLower() == "roleid") // Sign up is for users only, so we set the role to User by default
+                if (col.name.ToLower().Contains("roleid")) // Sign up is for users only, so we set the role to User by default
                 {
                     fieldsMapping.AppendLine($"            {col.name} = (int)Shared.enRoles.User,");
                     continue;
