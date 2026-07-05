@@ -12,15 +12,17 @@ namespace CodeGenerator
 
         public static string writeProperties(bool full = false)
         {
-            List<clsHelper.Column> columns = full
-        ? new List<clsHelper.Column>(clsHelper.mappedColumns)
-        : new List<clsHelper.Column>(clsHelper.ColumnsForCsharp);
+            // FIX: Swapped the collections to match your exact intent
+            System.Collections.Generic.List<clsHelper.Column> columns = full
+                ? new System.Collections.Generic.List<clsHelper.Column>(clsHelper.ColumnsForCsharp)
+                : new System.Collections.Generic.List<clsHelper.Column>(clsHelper.mappedColumns);
+
             string Properties = "";
 
             // Apply blacklist filter only if it's a Brief DTO
             if (!full)
             {
-                columns.RemoveAll(c => blackList.Contains(c.name.ToLower()));
+                columns.RemoveAll((clsHelper.Column c) => blackList.Contains(c.name.ToLower()));
             }
 
             foreach (clsHelper.Column col in columns)

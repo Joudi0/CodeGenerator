@@ -138,7 +138,7 @@ namespace CodeGenerator
             fieldsMapping.AppendLine($"            {columns[0].name} = -1,");
             columns.RemoveAt(0);
 
-            foreach (var col in columns)
+            foreach (clsHelper.Column col in columns)
             {
                 if (col.name.ToLower().Contains("hash"))
                 {
@@ -156,6 +156,8 @@ namespace CodeGenerator
                     fieldsMapping.AppendLine($"            {col.name} = (int)Shared.enRoles.User,");
                     continue;
                 }
+
+                if (col.name.ToLower().Contains("role")) continue; // Skip role name if it exists
 
                 fieldsMapping.AppendLine($"            {col.name} = registerDto.{col.name},");
             }

@@ -15,27 +15,48 @@ namespace CodeGenerator
         static string tabs = "        ";
         public static string addWithValueAllScript(bool withoutFirst = true, string dtoParamName = "dto")
         {
-            List<Column> newColumns = new List<Column>(getColumnsForCsharp());
+            System.Collections.Generic.List<Column> newColumns = new System.Collections.Generic.List<Column>(getColumnsForCsharp());
             if (withoutFirst) newColumns.RemoveAt(0);
             string script = "";
             string tabs = "\n\t\t    ";
+
             foreach (Column col in newColumns)
             {
                 script += tabs;
                 string propPath = $"{dtoParamName}.{col.name}";
-                if (col.isNullable == "NO") script += $@"command.Parameters.AddWithValue(@""{col.name}"", {propPath});";
-                else if (col.isNullable == "YES")
+
+                // Bulletproof case-insensitive check for database schema status
+                if (col.isNullable.ToUpper() == "NO")
                 {
+                    script += $@"command.Parameters.AddWithValue(@""{col.name}"", {propPath});";
+                }
+                else if (col.isNullable.ToUpper() == "YES")
+                {
+                    // Explicitly handling our modern C# Nullable infrastructure
                     switch (col.type)
                     {
-                case "string":
-                        script += $@"command.Parameters.AddWithValue(@""{col.name}"", string.IsNullOrEmpty({propPath}) ? DBNull.Value : (object){propPath});"; break;
-                case "byte": script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == 0) ? DBNull.Value : (object){propPath});"; break;
-                case "decimal":
-                case "int":
-                                script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == -1) ? DBNull.Value : (object){propPath});"; break;
-                case "DateTime": script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == DateTime.MinValue) ? DBNull.Value : (object){propPath});"; break;
-                default: break;
+                        case "string":
+                            script += $@"command.Parameters.AddWithValue(@""{col.name}"", string.IsNullOrEmpty({propPath}) ? DBNull.Value : (object){propPath});";
+                            break;
+
+                        case "int?":
+                        case "long?":
+                        case "short?":
+                        case "byte?":
+                        case "decimal?":
+                        case "float?":
+                        case "double?":
+                        case "bool?":
+                        case "Guid?":
+                        case "DateTime?":
+                        case "TimeSpan?":
+                            script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == null) ? DBNull.Value : (object){propPath});";
+                            break;
+
+                        default:
+                            // Safety net: Automatically handles byte[], object, or any unhandled type so parameters are NEVER skipped
+                            script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == null) ? DBNull.Value : (object){propPath});";
+                            break;
                     }
                 }
             }

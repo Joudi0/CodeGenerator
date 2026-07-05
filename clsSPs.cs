@@ -28,7 +28,7 @@ namespace CodeGenerator
             string parameters = "";
             foreach (clsHelper.Column col in cols)
             {
-                if(col.isNullable == "y" || col.isNullable == "Yes" || col.isNullable == "Y" || col.isNullable == "yes")
+                if(col.isNullable.ToUpper() == "YES")
                     parameters += $"\t@{col.name} {FormatSqlType(col)} = NULL,\n";
                 
                 else parameters += $"\t@{col.name} {FormatSqlType(col)},\n";

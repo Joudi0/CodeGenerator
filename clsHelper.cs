@@ -117,8 +117,9 @@ namespace CodeGenerator
                 AvailableRoles = new List<string> { "Admin", "User" };
             }
         }
-        public static string mapFromSQLToCsharp(string sql)
+        public static string mapFromSQLToCsharp(string sql, string isNullable = "NO")
         {
+            string suffix = (isNullable.ToUpper() == "YES") ? "?" : "";
             switch (sql)
             {
                 case "varchar":
@@ -128,36 +129,33 @@ namespace CodeGenerator
                 case "text":
                 case "ntext": return "string";
 
-                case "bigint": return "long";
-                case "int": return "int";
-                case "smallint": return "short";
-                case "tinyint": return "byte";
+                case "bigint": return "long" + suffix;
+                case "int": return "int" + suffix;
+                case "smallint": return "short" + suffix;
+                case "tinyint": return "byte" + suffix;
 
-                case "bit": return "bool";
+                case "bit": return "bool" + suffix;
 
                 case "decimal":
                 case "numeric":
                 case "money":
-                case "smallmoney": return "decimal";
-                case "float": return "double";
-                case "real": return "float";
+                case "smallmoney": return "decimal" + suffix;
+                case "float": return "double" + suffix;
+                case "real": return "float" + suffix;
 
                 case "date":
                 case "datetime":
                 case "smalldatetime":
-                case "datetime2":
-                    return "DateTime";
-                case "time": return "TimeSpan";
+                case "datetime2": return "DateTime" + suffix;
+                case "time": return "TimeSpan" + suffix;
 
-                case "uniqueidentifier": return "Guid";
+                case "uniqueidentifier": return "Guid" + suffix;
 
                 case "binary":
                 case "varbinary":
-                case "image":
-                    return "byte[]";
+                case "image": return "byte[]";
                 default: return "object";
             }
-
         }
 
         public static List<Column> mappingTheColumns()
@@ -172,7 +170,7 @@ namespace CodeGenerator
 
                 string sqlType = col.type.ToLower();
 
-                c.type = mapFromSQLToCsharp(sqlType);
+                c.type = mapFromSQLToCsharp(sqlType, col.isNullable);
 
                 if (c.name.ToLower().EndsWith("id") && clsHelper.getColumnIndex(c.name) > 0)
                 {
@@ -200,7 +198,7 @@ namespace CodeGenerator
                 c.composition = false;
 
                 string sqlType = col.type.ToLower();
-                c.type = mapFromSQLToCsharp(sqlType);
+                c.type = mapFromSQLToCsharp(sqlType, col.isNullable);
                 newList.Add(c);
             }
             return newList;
@@ -509,6 +507,18 @@ namespace Shared
             string projectPoliciesCode = clsAPIs.ProjectPolicies();
             File.WriteAllText(projectPoliciesPath, projectPoliciesCode);
             TrackLines(projectPoliciesCode);
+
+            // Adding clsDataSettings to DAL project infrastructure
+            string dataSettingsPath = Path.Combine(dalFolder, "clsDataSettings.cs");
+            string dataSettingsCode = $@"namespace DAL
+{{
+    public static class clsDataSettings
+    {{
+        public static string connectionString = ""{ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString}"";
+    }}
+}}";
+            File.WriteAllText(dataSettingsPath, dataSettingsCode);
+            TrackLines(dataSettingsCode);
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
