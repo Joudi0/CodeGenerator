@@ -275,13 +275,22 @@ namespace CodeGenerator
         {
             if (!Directory.Exists(targetDirectory))
                 Directory.CreateDirectory(targetDirectory);
-            // making Libraries
-            RunDotNetCommand(targetDirectory, $"new sln -n {solutionName}");
+
             RunDotNetCommand(targetDirectory, "new classlib -n DAL -f net10.0");
             RunDotNetCommand(targetDirectory, "new classlib -n BLL -f net10.0");
             RunDotNetCommand(targetDirectory, "new classlib -n Shared -f net10.0");
             RunDotNetCommand(targetDirectory, "new webapi -n WebAPI -f net10.0"); // PL
-            RunDotNetCommand(targetDirectory, $"sln {solutionName}.slnx add WebAPI/WebAPI.csproj BLL/BLL.csproj DAL/DAL.csproj Shared/Shared.csproj");
+
+            string slnxPath = Path.Combine(targetDirectory, $"{solutionName}.slnx");
+            string slnxContent = $@"<Solution>
+  <Project Path=""WebAPI/WebAPI.csproj"" />
+  <Project Path=""BLL/BLL.csproj"" />
+  <Project Path=""DAL/DAL.csproj"" />
+  <Project Path=""Shared/Shared.csproj"" />
+</Solution>";
+
+            File.WriteAllText(slnxPath, slnxContent);
+            TrackLines(slnxContent);
 
             // Main Folders/Libraries
             string dalFolder = Path.Combine(targetDirectory, "DAL");
@@ -325,9 +334,9 @@ namespace CodeGenerator
 
             // Updating Program.cs File
             string programCsPath = Path.Combine(targetDirectory, "WebAPI", "Program.cs");
+
             string cleanProgramCode = @"using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
@@ -346,7 +355,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration[""JwtSettings:Issuer""],
             ValidAudience = builder.Configuration[""JwtSettings:Audience""],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration[""JwtSettings:SecretKey""]))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration[""JwtSettings:SecretKey""]!))
         };
     });
 
@@ -364,7 +373,7 @@ builder.Services.AddRateLimiter((Microsoft.AspNetCore.RateLimiting.RateLimiterOp
     };
 
     // 1. Strict Policy for Authentication endpoints (5 requests per minute)
-    options.AddFixedWindowLimiter(""AuthPolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+    options.AddFixedWindowLimiter(Shared.clsProjectPolicies.AuthPolicy, (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
     {
         fixedOptions.PermitLimit = 5;
         fixedOptions.Window = TimeSpan.FromMinutes(1);
@@ -373,7 +382,7 @@ builder.Services.AddRateLimiter((Microsoft.AspNetCore.RateLimiting.RateLimiterOp
     });
 
     // 2. Medium Policy for Write operations like Add, Update, Delete (30 requests per minute)
-    options.AddFixedWindowLimiter(""WritePolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+    options.AddFixedWindowLimiter(Shared.clsProjectPolicies.WritePolicy, (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
     {
         fixedOptions.PermitLimit = 30;
         fixedOptions.Window = TimeSpan.FromMinutes(1);
@@ -382,7 +391,7 @@ builder.Services.AddRateLimiter((Microsoft.AspNetCore.RateLimiting.RateLimiterOp
     });
 
     // 3. Loose Policy for Read operations like Get, Paging, GetAll (100 requests per minute)
-    options.AddFixedWindowLimiter(""ReadPolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+    options.AddFixedWindowLimiter(Shared.clsProjectPolicies.ReadPolicy, (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
     {
         fixedOptions.PermitLimit = 100;
         fixedOptions.Window = TimeSpan.FromMinutes(1);
@@ -393,46 +402,18 @@ builder.Services.AddRateLimiter((Microsoft.AspNetCore.RateLimiting.RateLimiterOp
 
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Services.AddSwaggerGen(options =>
-{
-    options.AddSecurityDefinition(""Bearer"", new OpenApiSecurityScheme
-    {
-        Name = ""Authorization"",
-        Type = SecuritySchemeType.Http,
-        Scheme = ""Bearer"",
-        BearerFormat = ""JWT"",
-        In = ParameterLocation.Header,
-        Description = ""Enter: Bearer {your JWT token}""
-    });
-
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = ""Bearer""
-                }
-            },
-            new string[] {}
-        }
-    });
-});
+// For .NET 10 OpenAPI native support
+builder.Services.AddOpenApi();
 
 // Add authorization services
 builder.Services.AddAuthorization(options =>
 {
-    // Register the custom core policy for user resources
     options.AddPolicy(""UserOwnerOrAdmin"", policy =>
         policy.Requirements.Add(new WebAPI.Authorization.UserOwnerOrAdminRequirement()));
 });
 
-// FIXED: Using explicit type instead of var for reflection scanner
 System.Collections.Generic.IEnumerable<System.Type> handlerTypes = typeof(Program).Assembly.GetTypes()
     .Where((System.Type t) => typeof(IAuthorizationHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
 foreach (System.Type handler in handlerTypes)
 {
     builder.Services.AddSingleton(typeof(IAuthorizationHandler), handler);
@@ -443,17 +424,15 @@ builder.Services.AddControllers();
 WebApplication app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi(); 
 }
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
-app.UseRateLimiter(); // Activated the rate limiting middleware inside the pipeline
+app.UseRateLimiter(); 
 app.UseAuthorization();
 app.MapControllers();
 app.Run();";
-
             File.WriteAllText(programCsPath, cleanProgramCode);
             TrackLines(cleanProgramCode);
 
@@ -533,7 +512,6 @@ namespace Shared
             clsHelper.TrackClass(3);
 
             RunDotNetCommand(webApiFolder, "add package Microsoft.AspNetCore.Authentication.JwtBearer");
-            RunDotNetCommand(webApiFolder, "add package Swashbuckle.AspNetCore");
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
@@ -607,6 +585,7 @@ namespace Shared
             if (lower.Contains("person")) return "Person";
             if (lower.Contains("application")) return "Application";
             if (lower.Contains("license")) return "License";
+            if (lower.Contains("country")) return "Country";
             string clean = columnName.EndsWith("ID", StringComparison.OrdinalIgnoreCase)
                 ? columnName.Substring(0, columnName.Length - 2)
                 : columnName;

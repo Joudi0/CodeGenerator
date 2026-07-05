@@ -94,7 +94,14 @@ namespace Shared
             // Password property is only included in the Full DTO for user tables to facilitate registration and updates
             if (isUser)
             {
-                extraProperties = "        public string Password { get; set; }\n";
+                // Check if 'Password' already exists in the columns to avoid duplication!
+                bool hasPassword = clsHelper.ColumnsForCsharp.Any(c => c.name.ToLower() == "password");
+
+                // Password property is only included in the Full DTO for user tables if it's not already there
+                if (isUser && !hasPassword)
+                {
+                    extraProperties = "        public string Password { get; set; }\n";
+                }
             }
 
             string DTO = $@"
@@ -142,7 +149,7 @@ namespace Shared
             foreach (var col in columns)
             {
                 // Skip cryptographic fields as they are generated on the server side, not sent by the client
-                if (col.name.ToLower().Contains("hash") || col.name.ToLower().Contains("salt"))
+                if (col.name.ToLower().Contains("hash") || col.name.ToLower().Contains("salt") || col.name.ToLower() == "password")
                     continue;
 
                 // NEW: Skip the role column to prevent Mass Assignment vulnerability
