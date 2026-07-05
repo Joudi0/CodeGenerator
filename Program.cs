@@ -409,7 +409,7 @@ namespace CodeGenerator
         "[bold white]Telegram:[/] [blue]@Joudi_Adeeb[/]\n" +
         "[bold white]LinkedIn:[/] [blue]linkedin.com/in/joudi-adeeb[/]"
     )
-)
+);
             }
             catch (Exception ex)
             {
