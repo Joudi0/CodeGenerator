@@ -28,8 +28,18 @@ namespace CodeGenerator
         public static List<Column> mappedColumns;
         public static List<Column> ColumnsForCsharp;
         public static List<string> AvailableRoles = new List<string>();
+
         // The global dopamine counter!
         public static int TotalLinesGenerated = 0;
+        public static int TotalClasses = 0;
+        public static int TotalDTOs = 0;
+        public static int TotalSPs = 0;
+        public static void TrackClass(int count = 1) => TotalClasses += count;
+        public static void TrackDTO(int count = 1) => TotalDTOs += count;
+        public static void TrackSPs(int count = 1) => TotalSPs += count;
+
+
+
         public static string connectionString = ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString;
 
         public static Column makeMappedColumnByName(string name)
@@ -519,6 +529,9 @@ namespace Shared
 }}";
             File.WriteAllText(dataSettingsPath, dataSettingsCode);
             TrackLines(dataSettingsCode);
+
+            clsHelper.TrackClass(3);
+
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
@@ -561,6 +574,7 @@ namespace Shared
 
                         transaction.Commit();
                         Console.WriteLine("All Stored Procedures are injected in the database successfully!.");
+                        TotalSPs += allSPs.Count;
                         foreach (string spCode in allSPs)
                         {
                             TrackLines(spCode);
@@ -798,6 +812,7 @@ namespace WebAPI.Services
 }";
             File.WriteAllText(clsTokenServicePath, clsTokenService);
             TrackLines(clsTokenService);
+            TrackClass();
         }
 
         private static async Task GenerateAuthDTOsAsync(string projectDirectory)
@@ -835,7 +850,9 @@ namespace WebAPI.Services
             string tokenRequestDTOPath = Path.Combine(authDtoFolder, "TokenRequestDTO.cs");
             string tokenRequestDTOCode = "namespace Shared\n{\n    public class TokenRequestDTO\n    {\n        public string AccessToken { get; set; }\n        public string RefreshToken { get; set; }\n    }\n}";
             File.WriteAllText(tokenRequestDTOPath, tokenRequestDTOCode);
+
             TrackLines(tokenRequestDTOCode);
+            TrackDTO(7);
         }
 
         private static async Task GenerateAuthControllerAsync(string projectDirectory)
@@ -870,6 +887,7 @@ namespace WebAPI.Controllers
 }}";
             File.WriteAllText(authControllerPath, fullAuthControllerCode);
             TrackLines(fullAuthControllerCode);
+            TrackClass();
         }
 
         private static async Task GenerateRolesEnumAsync(string projectDirectory)
@@ -955,6 +973,7 @@ namespace WebAPI.Authorization
     }
 }";
             File.WriteAllText(Path.Combine(authorizationFolder, "UserOwnerOrAdminHandler.cs"), handlerCode);
+            TrackClass(2);
         }
 
         public static async Task Auth()

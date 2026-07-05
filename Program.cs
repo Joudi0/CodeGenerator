@@ -395,14 +395,21 @@ namespace CodeGenerator
                     await writer.WriteAsync(controllerCode);
                 }
                 TrackLines(controllerCode); // Catch and count!
+                clsHelper.TrackClass(3);
+                clsHelper.TrackDTO(2);
                 Console.WriteLine("[Done]");
 
-                AnsiConsole.MarkupLine($"\n[green]Success:[/] Files generated and saved successfully!");
-                AnsiConsole.MarkupLine($"[grey]Stored Procedures:[/] [bold green]Injected Directly into DB![/]");
-                AnsiConsole.MarkupLine($"[grey]DAL Class:[/] [cyan]{dalPath}[/]");
-                AnsiConsole.MarkupLine($"[grey]BLL Class:[/] [cyan]{bllPath}[/]");
-                AnsiConsole.MarkupLine($"[grey]Web API Controller:[/] [cyan]{controllerPath}[/]");
-                AnsiConsole.MarkupLine($"[grey]DTO Class:[/] [cyan]{dto}[/]");
+                Panel signaturePanel = new Panel(
+    new Markup(
+        $"[bold gold1]🚀 Total Code Generated:[/] [bold green]{TotalLinesGenerated:N0} lines of clean code![/]\n" +
+        $"[bold gold1]📦 Total Classes Generated:[/] [bold green]{clsHelper.TotalClasses} classes[/]\n" +
+        $"[bold gold1]📜 Total DTOs Generated:[/] [bold green]{clsHelper.TotalDTOs} DTOs[/]\n" +
+        $"[bold gold1]🔥 Total SPs Injected:[/] [bold green]{clsHelper.TotalSPs} Stored Procedures[/]\n\n" +
+        "[bold white]Developed with ❤️ by:[/] [bold green]Joudi[/]\n" +
+        "[bold white]Telegram:[/] [blue]@Joudi_Adeeb[/]\n" +
+        "[bold white]LinkedIn:[/] [blue]linkedin.com/in/joudi-adeeb[/]"
+    )
+)
             }
             catch (Exception ex)
             {
