@@ -41,41 +41,41 @@ namespace CodeGenerator
         {
             return Columns.Find(n => n.name == name);
         }
-
         public static List<Column> getColumnsNameAndType()
         {
             List<Column> columnsList = new List<Column>();
-
-            SqlConnection connection = new SqlConnection(connectionString);
             string query = $"SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{tableName}' ORDER BY ORDINAL_POSITION;";
-            SqlCommand command = new SqlCommand(query, connection);
 
             try
             {
-                connection.Open();
-                SqlDataReader reader = command.ExecuteReader();
-                while (reader.Read())
+                using (Microsoft.Data.SqlClient.SqlConnection connection = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+                using (Microsoft.Data.SqlClient.SqlCommand command = new Microsoft.Data.SqlClient.SqlCommand(query, connection))
                 {
-                    Column column = new Column();
-                    column.name = reader.GetString(0);
-                    column.type = reader.GetString(1);
-                    column.isNullable = reader.GetString(2);
-                    columnsList.Add(column);
+                    connection.Open();
+                    using (Microsoft.Data.SqlClient.SqlDataReader reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            Column column = new Column();
+                            column.name = reader.GetString(0);
+                            column.type = reader.GetString(1);
+                            column.isNullable = reader.GetString(2);
+                            columnsList.Add(column);
+                        }
+                    }
                 }
-                reader.Close();
             }
-            catch (Exception) { throw; }
-            finally { connection.Close(); }
+            catch (Exception)
+            {
+                throw;
+            }
             return columnsList;
         }
 
         public static void LoadAvailableRoles()
         {
-            // If roles are already loaded, exit immediately
             if (AvailableRoles.Count > 0) return;
 
-
-            // SQL script to ensure table exists and seed it with true roles (Public removed)
             string ensureRolesSql = @"
         IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Roles')
         BEGIN
@@ -90,20 +90,18 @@ namespace CodeGenerator
 
             try
             {
-                using (var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+                using (Microsoft.Data.SqlClient.SqlConnection conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
                 {
                     conn.Open();
 
-                    // 1. First, ensure the Roles table exists and is seeded
-                    using (var cmdEnsure = new Microsoft.Data.SqlClient.SqlCommand(ensureRolesSql, conn))
+                    using (Microsoft.Data.SqlClient.SqlCommand cmdEnsure = new Microsoft.Data.SqlClient.SqlCommand(ensureRolesSql, conn))
                     {
                         cmdEnsure.ExecuteNonQuery();
                     }
 
-                    // 2. Next, fetch the roles from the guaranteed database table
-                    using (var cmdFetch = new Microsoft.Data.SqlClient.SqlCommand(fetchRolesSql, conn))
+                    using (Microsoft.Data.SqlClient.SqlCommand cmdFetch = new Microsoft.Data.SqlClient.SqlCommand(fetchRolesSql, conn))
                     {
-                        using (var reader = cmdFetch.ExecuteReader())
+                        using (Microsoft.Data.SqlClient.SqlDataReader reader = cmdFetch.ExecuteReader())
                         {
                             while (reader.Read())
                             {
@@ -115,7 +113,6 @@ namespace CodeGenerator
             }
             catch (Exception ex)
             {
-                // The catch block now acts as a true safety net for actual connection issues
                 Console.WriteLine($"\n[red]Database Error during role initialization:[/] {ex.Message}");
                 AvailableRoles = new List<string> { "Admin", "User" };
             }
@@ -321,8 +318,6 @@ namespace CodeGenerator
 
             // Updating Program.cs File
             string programCsPath = Path.Combine(targetDirectory, "WebAPI", "Program.cs");
-
-            // FIXED: Added System.Linq and Microsoft.AspNetCore.Authorization to support the reflection scanner
             string cleanProgramCode = @"using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -346,6 +341,47 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration[""JwtSettings:SecretKey""]))
         };
     });
+
+// Configure IP-based rate limiting policies automatically with custom error responses
+builder.Services.AddRateLimiter((Microsoft.AspNetCore.RateLimiting.RateLimiterOptions options) =>
+{
+    options.RejectionStatusCode = Microsoft.AspNetCore.Http.StatusCodes.Status429TooManyRequests;
+
+    // Handle rejected requests globally and return a clean JSON message
+    options.OnRejected = async (Microsoft.AspNetCore.RateLimiting.OnRejectedContext context, System.Threading.CancellationToken token) =>
+    {
+        context.HttpContext.Response.ContentType = ""application/json"";
+        string errorMessage = ""{\""error\"": \""Too many requests. Please try again later.\""}"";
+        await context.HttpContext.Response.WriteAsync(errorMessage, System.Text.Encoding.UTF8, token);
+    };
+
+    // 1. Strict Policy for Authentication endpoints (5 requests per minute)
+    options.AddFixedWindowLimiter(""AuthPolicy"", (Microsoft.AspNetCore.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+    {
+        fixedOptions.PermitLimit = 5;
+        fixedOptions.Window = TimeSpan.FromMinutes(1);
+        fixedOptions.QueueLimit = 0;
+        fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+    });
+
+    // 2. Medium Policy for Write operations like Add, Update, Delete (30 requests per minute)
+    options.AddFixedWindowLimiter(""WritePolicy"", (Microsoft.AspNetCore.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+    {
+        fixedOptions.PermitLimit = 30;
+        fixedOptions.Window = TimeSpan.FromMinutes(1);
+        fixedOptions.QueueLimit = 2;
+        fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+    });
+
+    // 3. Loose Policy for Read operations like Get, Paging, GetAll (100 requests per minute)
+    options.AddFixedWindowLimiter(""ReadPolicy"", (Microsoft.AspNetCore.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+    {
+        fixedOptions.PermitLimit = 100;
+        fixedOptions.Window = TimeSpan.FromMinutes(1);
+        fixedOptions.QueueLimit = 5;
+        fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+    });
+});
 
 builder.Services.AddEndpointsApiExplorer();
 
@@ -385,18 +421,18 @@ builder.Services.AddAuthorization(options =>
         policy.Requirements.Add(new WebAPI.Authorization.UserOwnerOrAdminRequirement()));
 });
 
-// FIXED: Native Reflection Scanner to automatically register any generated IAuthorizationHandler smoothly
-var handlerTypes = typeof(Program).Assembly.GetTypes()
-    .Where(t => typeof(IAuthorizationHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+// FIXED: Using explicit type instead of var for reflection scanner
+System.Collections.Generic.IEnumerable<System.Type> handlerTypes = typeof(Program).Assembly.GetTypes()
+    .Where((System.Type t) => typeof(IAuthorizationHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
 
-foreach (var handler in handlerTypes)
+foreach (System.Type handler in handlerTypes)
 {
     builder.Services.AddSingleton(typeof(IAuthorizationHandler), handler);
 }
 
 builder.Services.AddControllers(); 
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
@@ -406,6 +442,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
+app.UseRateLimiter(); // Activated the rate limiting middleware inside the pipeline
 app.UseAuthorization();
 app.MapControllers();
 app.Run();";
@@ -466,6 +503,12 @@ namespace Shared
 }";
             File.WriteAllText(appSettingsPath, appSettingsCode);
             TrackLines(appSettingsCode);
+
+            // Adding clsProjectPolicies to Shared project infrastructure
+            string projectPoliciesPath = Path.Combine(sharedFolder, "clsProjectPolicies.cs");
+            string projectPoliciesCode = clsAPIs.ProjectPolicies();
+            File.WriteAllText(projectPoliciesPath, projectPoliciesCode);
+            TrackLines(projectPoliciesCode);
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
@@ -553,25 +596,19 @@ namespace Shared
             }
             return tableNames;
         }
-
-        public static async Task Auth()
+        private static async Task EnsureTokenTableAsync()
         {
-            string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
-            string webApiServicesFolder = Path.Combine(_projectDirectory, "WebAPI", "Services");
-            if (!Directory.Exists(webApiServicesFolder)) Directory.CreateDirectory(webApiServicesFolder);
-
-            // Ensure the database table exists with hashing and UTC time
             string ensureTokensTableSql = @"
-        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'UserTokens')
-        BEGIN
-            CREATE TABLE UserTokens (
-                TokenID INT IDENTITY(1,1) PRIMARY KEY,
-                UserID INT NOT NULL,
-                RefreshTokenHash NVARCHAR(256) NOT NULL UNIQUE,
-                ExpiryDate DATETIME NOT NULL,
-                RevokedAt DATETIME NULL
-            );
-        END";
+    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'UserTokens')
+    BEGIN
+        CREATE TABLE UserTokens (
+            TokenID INT IDENTITY(1,1) PRIMARY KEY,
+            UserID INT NOT NULL,
+            RefreshTokenHash NVARCHAR(256) NOT NULL UNIQUE,
+            ExpiryDate DATETIME NOT NULL,
+            RevokedAt DATETIME NULL
+        );
+    END";
 
             try
             {
@@ -588,8 +625,13 @@ namespace Shared
             {
                 Console.WriteLine($"\n[red]Database Error during Token Table initialization:[/] {ex.Message}");
             }
+        }
 
-            // Token service supporting generation, validation, and DB persistence with explicit types
+        private static void GenerateTokenService(string projectDirectory)
+        {
+            string webApiServicesFolder = Path.Combine(projectDirectory, "WebAPI", "Services");
+            if (!Directory.Exists(webApiServicesFolder)) Directory.CreateDirectory(webApiServicesFolder);
+
             string clsTokenServicePath = Path.Combine(webApiServicesFolder, "clsTokenService.cs");
             string clsTokenService = @"using System;
 using System.IdentityModel.Tokens.Jwt;
@@ -632,7 +674,7 @@ namespace WebAPI.Services
                 issuer: jwtSettings[""Issuer""],
                 audience: jwtSettings[""Audience""],
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(15), // Short-lived Access Token
+                expires: DateTime.UtcNow.AddMinutes(15),
                 signingCredentials: creds
             );
 
@@ -648,7 +690,6 @@ namespace WebAPI.Services
             }
             string rawRefreshToken = Convert.ToBase64String(randomNumber);
 
-            // Hash the refresh token before storing it for maximum security
             string tokenHash = ComputeSha256Hash(rawRefreshToken);
 
             using (SqlConnection conn = new SqlConnection(_connectionString))
@@ -658,14 +699,14 @@ namespace WebAPI.Services
                 {
                     cmd.Parameters.AddWithValue(""@UserID"", userId);
                     cmd.Parameters.AddWithValue(""@TokenHash"", tokenHash);
-                    cmd.Parameters.AddWithValue(""@ExpiryDate"", DateTime.UtcNow.AddDays(7)); // Long-lived expiration
+                    cmd.Parameters.AddWithValue(""@ExpiryDate"", DateTime.UtcNow.AddDays(7));
 
                     await conn.OpenAsync();
                     await cmd.ExecuteNonQueryAsync();
                 }
             }
 
-            return rawRefreshToken; // Return the plain token to the client only once
+            return rawRefreshToken;
         }
 
         public async Task<int> ValidateAndRevokeRefreshTokenAsync(int userId, string rawRefreshToken)
@@ -674,7 +715,6 @@ namespace WebAPI.Services
 
             using (SqlConnection conn = new SqlConnection(_connectionString))
             {
-                // Verify the token validity and ensure it is not revoked
                 string query = ""SELECT TokenID FROM UserTokens WHERE UserID = @UserID AND RefreshTokenHash = @TokenHash AND ExpiryDate > @Now AND RevokedAt IS NULL"";
                 using (SqlCommand cmd = new SqlCommand(query, conn))
                 {
@@ -688,7 +728,6 @@ namespace WebAPI.Services
                     if (result != null)
                     {
                         int tokenId = Convert.ToInt32(result);
-                        // Perform Token Rotation by revoking the used token immediately
                         await RevokeTokenByIdAsync(tokenId);
                         return tokenId;
                     }
@@ -749,43 +788,49 @@ namespace WebAPI.Services
 }";
             File.WriteAllText(clsTokenServicePath, clsTokenService);
             TrackLines(clsTokenService);
+        }
 
-            // Generate folders and inject separate DTO classes for tokens
-            string authDtoFolder = Path.Combine(_projectDirectory, "Shared", "DTOs", "Auth");
+        private static async Task GenerateAuthDTOsAsync(string projectDirectory)
+        {
+            string authDtoFolder = Path.Combine(projectDirectory, "Shared", "DTOs", "Auth");
             if (!Directory.Exists(authDtoFolder)) Directory.CreateDirectory(authDtoFolder);
 
-            // Writing Token Response DTO
             string tokenResponseCode = clsAPIs.TokenResponseDTO();
             File.WriteAllText(Path.Combine(authDtoFolder, "TokenResponseDTO.cs"), tokenResponseCode);
             TrackLines(tokenResponseCode);
 
-            // Writing Refresh Request DTO
             string refreshRequestCode = clsAPIs.RefreshRequestDTO();
             File.WriteAllText(Path.Combine(authDtoFolder, "RefreshRequestDTO.cs"), refreshRequestCode);
             TrackLines(refreshRequestCode);
 
-            // Writing Logout Request DTO
             string logoutRequestCode = clsAPIs.LogoutRequestDTO();
             File.WriteAllText(Path.Combine(authDtoFolder, "LogoutRequestDTO.cs"), logoutRequestCode);
             TrackLines(logoutRequestCode);
-            // Remainder of the method for building controller and enums
+
             string AuthDTOPath = Path.Combine(authDtoFolder, "AuthDTO.cs");
             string AuthDTOCode = clsAPIs.SecurityDTO();
             using (StreamWriter writer = new StreamWriter(AuthDTOPath)) { await writer.WriteAsync(AuthDTOCode); }
+            TrackLines(AuthDTOCode);
 
             string RegisterRequestDTOPath = Path.Combine(authDtoFolder, "RegisterRequestDTO.cs");
             string RegisterRequestDTOCode = clsAPIs.RegisterRequestDTO();
             using (StreamWriter writer = new StreamWriter(RegisterRequestDTOPath)) { await writer.WriteAsync(RegisterRequestDTOCode); }
+            TrackLines(RegisterRequestDTOCode);
 
             string loginRequestDTOPath = Path.Combine(authDtoFolder, "LoginRequestDTO.cs");
             string loginRequestDTOCode = "namespace Shared\n{\n    public class LoginRequestDTO\n    {\n        public string Username { get; set; }\n        public string Password { get; set; }\n    }\n}";
             File.WriteAllText(loginRequestDTOPath, loginRequestDTOCode);
+            TrackLines(loginRequestDTOCode);
 
             string tokenRequestDTOPath = Path.Combine(authDtoFolder, "TokenRequestDTO.cs");
             string tokenRequestDTOCode = "namespace Shared\n{\n    public class TokenRequestDTO\n    {\n        public string AccessToken { get; set; }\n        public string RefreshToken { get; set; }\n    }\n}";
             File.WriteAllText(tokenRequestDTOPath, tokenRequestDTOCode);
+            TrackLines(tokenRequestDTOCode);
+        }
 
-            string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
+        private static async Task GenerateAuthControllerAsync(string projectDirectory)
+        {
+            string controllersFolder = Path.Combine(projectDirectory, "WebAPI", "Controllers");
             if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
             string authControllerPath = Path.Combine(controllersFolder, "AuthController.cs");
 
@@ -806,6 +851,7 @@ using System;
 namespace WebAPI.Controllers
 {{
     [ApiController]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.AuthPolicy)]
     [Route(""api/[controller]"")]
     public class AuthController : ControllerBase
     {{
@@ -813,36 +859,145 @@ namespace WebAPI.Controllers
     }}
 }}";
             File.WriteAllText(authControllerPath, fullAuthControllerCode);
+            TrackLines(fullAuthControllerCode);
         }
+
+        private static async Task GenerateRolesEnumAsync(string projectDirectory)
+        {
+            Console.Write("-> Making Dynamic Roles Enum... ");
+            string enumsFolder = Path.Combine(projectDirectory, "Shared", "Enums");
+            if (!Directory.Exists(enumsFolder)) Directory.CreateDirectory(enumsFolder);
+            StringBuilder enumMembers = new StringBuilder();
+            string fetchRolesSql = "SELECT RoleID, RoleName FROM Roles ORDER BY RoleID;";
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                using (SqlCommand cmd = new SqlCommand(fetchRolesSql, conn))
+                {
+                    await conn.OpenAsync();
+                    using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            int roleId = reader.GetInt32(0);
+                            string roleName = reader.GetString(1).Replace(" ", "");
+                            enumMembers.AppendLine($"        {roleName} = {roleId},");
+                        }
+                    }
+                }
+            }
+
+            string enumCode = $@"namespace Shared
+{{
+    public enum enRoles
+    {{
+{enumMembers.ToString().TrimEnd('\n', '\r', ',')}
+    }}
+}}";
+            string enumPath = Path.Combine(enumsFolder, "enRoles.cs");
+            File.WriteAllText(enumPath, enumCode);
+            TrackLines(enumCode);
+            Console.WriteLine("[Done]");
+        }
+        private static void GenerateAuthPolicies(string projectDirectory)
+        {
+            string authorizationFolder = Path.Combine(projectDirectory, "WebAPI", "Policies", "Authorization");
+            if (!Directory.Exists(authorizationFolder)) Directory.CreateDirectory(authorizationFolder);
+
+            string requirementCode = @"using Microsoft.AspNetCore.Authorization;
+
+namespace WebAPI.Authorization
+{
+    public class UserOwnerOrAdminRequirement : IAuthorizationRequirement
+    {
+    }
+}";
+            File.WriteAllText(Path.Combine(authorizationFolder, "UserOwnerOrAdminRequirement.cs"), requirementCode);
+
+            string handlerCode = @"using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+namespace WebAPI.Authorization
+{
+    public class UserOwnerOrAdminHandler : AuthorizationHandler<UserOwnerOrAdminRequirement, int>
+    {
+        protected override Task HandleRequirementAsync(
+            AuthorizationHandlerContext context, 
+            UserOwnerOrAdminRequirement requirement, 
+            int resourceUserId)
+        {
+            if (context.User.IsInRole(""Admin""))
+            {
+                context.Succeed(requirement);
+                return Task.CompletedTask;
+            }
+
+            string currentUserIdClaim = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (int.TryParse(currentUserIdClaim, out int authenticatedUserId) &&
+                authenticatedUserId == resourceUserId)
+            {
+                context.Succeed(requirement);
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+}";
+            File.WriteAllText(Path.Combine(authorizationFolder, "UserOwnerOrAdminHandler.cs"), handlerCode);
+        }
+
+        public static async Task Auth()
+        {
+            string _projectDirectory = System.Configuration.ConfigurationManager.AppSettings["projectDirectory"];
+
+            // Step 1: Initialize database components
+            await EnsureTokenTableAsync();
+
+            // Step 2: Generate token infrastructure services
+            GenerateTokenService(_projectDirectory);
+
+            // Step 3: Generate all dedicated authentication DTOs
+            await GenerateAuthDTOsAsync(_projectDirectory);
+
+            // Step 4: Build and inject the main Auth Controller
+            await GenerateAuthControllerAsync(_projectDirectory);
+
+            // Step 5: Fetch roles and build dynamic Enum
+            await GenerateRolesEnumAsync(_projectDirectory);
+
+            // Step 6: Create core policy requirements and handlers
+            GenerateAuthPolicies(_projectDirectory);
+        }
+
 
         public static void debugThing(object obj)
         {
-                Type type = obj.GetType();
-                if(type != null)
+            Type type = obj.GetType();
+            if (type != null)
+            {
+                System.Linq.IOrderedEnumerable<System.Reflection.MethodInfo> Methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static).OrderBy((System.Reflection.MethodInfo method) => method.Name);
+                Console.WriteLine($"Type: {type.FullName}");
+                Console.WriteLine($"Type: {type.FullName}");
+
+                foreach (System.Reflection.PropertyInfo prop in type.GetProperties())
                 {
-                    var Methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static).OrderBy(method => method.Name);
-                    Console.WriteLine($"Type: {type.FullName}");
-                    Console.WriteLine($"Type: {type.FullName}");
-
-                    foreach (var prop in type.GetProperties())
+                    try
                     {
-                        try
-                        {
-                            var value = prop.GetValue(obj);
-                            Console.WriteLine($"  {prop.Name} = {value}");
-                        }
-                        catch
-                        {
-                            Console.WriteLine($"  {prop.Name} = [Cannot Read]");
-                        }
+                        object value = prop.GetValue(obj);
+                        Console.WriteLine($"  {prop.Name} = {value}");
                     }
-                    foreach (var method in Methods)
+                    catch
                     {
-                        Console.WriteLine($"Method: {method.Name}");
+                        Console.WriteLine($"  {prop.Name} = [Cannot Read]");
                     }
-                    object myClass = Activator.CreateInstance(type);
                 }
-
+                foreach (System.Reflection.MethodInfo method in Methods)
+                {
+                    Console.WriteLine($"Method: {method.Name}");
+                }
+                object myClass = Activator.CreateInstance(type);
+            }
         }
     }
 }

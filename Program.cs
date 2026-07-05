@@ -17,15 +17,15 @@ namespace CodeGenerator
         {
             Console.OutputEncoding = Encoding.UTF8;
             AnsiConsole.Write(
-                                new FigletText("ADO Gen Code")
+                                new FigletText("Code Generator")
                                     .Centered()
                                     .Color(Color.Green));
 
-            AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator[/]").Justify(Justify.Left));
-            AnsiConsole.MarkupLine("[grey]This tool generates DAL and BLL CRUD ADO.NET for you.[/]");
+            AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator v3.0[/]").Justify(Justify.Left));
+            AnsiConsole.MarkupLine("[grey]This tool generates SPs, DAL, BLL, Controllers, and Security For you.[/]");
             AnsiConsole.MarkupLine("[red]Notice:[/] Please ensure database settings are configured in [cyan]clsHelper.connectionString[/].\n");
 
-            Console.Write("First Time? (y/n): ");
+            Console.Write("New Solution? (y/n): ");
             string answer = Console.ReadLine();
             if (answer.ToLower() == "yes" || answer.ToLower() == "y")
             {
@@ -57,7 +57,7 @@ namespace CodeGenerator
                     $"[bold gold1]🚀 Total Code Generated:[/] [bold green]{TotalLinesGenerated:N0} lines of clean code![/]\n\n" +
                     "[bold white]Developed with ❤️ by:[/] [bold green]Joudi[/]\n" +
                     "[bold white]Telegram:[/] [blue]@Joudi_Adeeb[/]\n" +
-                    "[bold white]LinkedIn:[/] [blue]linkedin.com/in/joudi-mohammad-002685283[/]"
+                    "[bold white]LinkedIn:[/] [blue]linkedin.com/in/joudi-adeeb[/]"
                 )
             )
             .Header("[yellow]Generation Completed![/]")

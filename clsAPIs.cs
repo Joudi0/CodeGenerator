@@ -337,10 +337,7 @@ namespace Shared
             string paramName = (columnIndex == 0) ? "id" : C.name;
 
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
+            string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
 
             string ownershipCheck = "";
             string serviceInjection = "";
@@ -350,7 +347,7 @@ namespace Shared
                 serviceInjection = ", [FromServices] IAuthorizationService authorizationService";
                 ownershipCheck = $@"
             // Centralized Policy-Based Resource Authorization Check
-            var authResult = await authorizationService.AuthorizeAsync(User, {paramName}, ""UserOwnerOrAdmin"");
+            Microsoft.AspNetCore.Authorization.AuthorizationResult authResult = await authorizationService.AuthorizeAsync(User, {paramName}, ""UserOwnerOrAdmin"");
             if (!authResult.Succeeded) return Forbid();
 ";
             }
@@ -359,12 +356,9 @@ namespace Shared
         /// <summary>
         /// Retrieves a record by its {C.name}.
         /// </summary>
-        /// <param name=""{paramName}"">The {C.name} parameter value.</param>
-        /// <returns>An IActionResult containing the requested record details.</returns>
-        /// <response code=""200"">Returns the found record details.</response>
-        /// <response code=""404"">If no record matches the provided {C.name}.</response>
         {authAttribute}
         [HttpGet(""{route}"")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
         [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> {actionName}({C.type} {paramName}{serviceInjection})
@@ -378,10 +372,7 @@ namespace Shared
         public static string updateAction(string roles)
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
+            string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
 
             string ownershipCheck = "";
             string serviceInjection = "";
@@ -390,11 +381,9 @@ namespace Shared
             {
                 string idFieldName = clsHelper.ColumnsForCsharp[0].name;
                 serviceInjection = ", [FromServices] IAuthorizationService authorizationService";
-
-                // 1. Centralized Policy-Based Resource Authorization Check
                 ownershipCheck = $@"
             // Centralized Policy-Based Resource Authorization Check
-            var authResult = await authorizationService.AuthorizeAsync(User, dto.{idFieldName}, ""UserOwnerOrAdmin"");
+            Microsoft.AspNetCore.Authorization.AuthorizationResult authResult = await authorizationService.AuthorizeAsync(User, dto.{idFieldName}, ""UserOwnerOrAdmin"");
             if (!authResult.Succeeded) return Forbid();
 ";
             }
@@ -403,13 +392,9 @@ namespace Shared
         /// <summary>
         /// Updates an existing record in the database.
         /// </summary>
-        /// <param name=""dto"">The updated data transfer object.</param>
-        /// <returns>An IActionResult indicating the success of the update operation.</returns>
-        /// <response code=""200"">If the record was updated successfully.</response>
-        /// <response code=""400"">If the input payload is null.</response>
-        /// <response code=""404"">If the record to update does not exist or modification failed.</response>
         {authAttribute}
         [HttpPut]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.WritePolicy)]
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
@@ -427,26 +412,19 @@ namespace Shared
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
 
-            // if is it a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during creation
             if (isUser && clsHelper.AvailableRoles.Count > 0)
             {
                 roles = clsHelper.AvailableRoles[0];
             }
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
+            string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
         /// Adds a new record to the database.
         /// </summary>
-        /// <param name=""dto"">The full data transfer object for creation.</param>
-        /// <returns>An IActionResult containing the created record details and location.</returns>
-        /// <response code=""201"">Returns the newly created record along with its location.</response>
-        /// <response code=""400"">If the input payload is null or invalid.</response>
-        /// <response code=""500"">If an internal database error occurs during the operation.</response>
         {authAttribute}
         [HttpPost]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.WritePolicy)]
         [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
@@ -464,10 +442,7 @@ namespace Shared
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
             string bllMethodName = $"delete{clsHelper.objectName}";
-
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
+            string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
 
             string ownershipCheck = "";
             string serviceInjection = "";
@@ -477,7 +452,7 @@ namespace Shared
                 serviceInjection = ", [FromServices] IAuthorizationService authorizationService";
                 ownershipCheck = $@"
             // Centralized Policy-Based Resource Authorization Check
-            var authResult = await authorizationService.AuthorizeAsync(User, {C.name}, ""UserOwnerOrAdmin"");
+            Microsoft.AspNetCore.Authorization.AuthorizationResult authResult = await authorizationService.AuthorizeAsync(User, {C.name}, ""UserOwnerOrAdmin"");
             if (!authResult.Succeeded) return Forbid();
 ";
             }
@@ -486,12 +461,9 @@ namespace Shared
         /// <summary>
         /// Deletes a specific record using its unique identifier.
         /// </summary>
-        /// <param name=""{C.name}"">The key value of the target record to delete.</param>
-        /// <returns>An IActionResult confirming deletion.</returns>
-        /// <response code=""200"">If the record was deleted successfully.</response>
-        /// <response code=""404"">If the target record is not found or cannot be deleted.</response>
         {authAttribute}
         [HttpDelete(""{C.name}/{{{C.name}}}"")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.WritePolicy)]
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Delete({C.type} {C.name}{serviceInjection})
@@ -503,8 +475,6 @@ namespace Shared
 ";
         }
 
-       
-
         public static string isExistAction(clsHelper.Column C, string roles)
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);
@@ -513,7 +483,6 @@ namespace Shared
             string route = $"exists/{C.name}/{{{C.name}}}";
 
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-
             string ownershipCheck = "";
             string serviceInjection = "";
 
@@ -521,37 +490,32 @@ namespace Shared
             {
                 if (columnIndex == 0)
                 {
-                    // running centralized policy-based authorization check for user existence by ID
                     serviceInjection = ", [FromServices] IAuthorizationService authorizationService";
                     ownershipCheck = $@"
             // Centralized Policy-Based Resource Authorization Check
-            var authResult = await authorizationService.AuthorizeAsync(User, {C.name}, ""UserOwnerOrAdmin"");
+            Microsoft.AspNetCore.Authorization.AuthorizationResult authResult = await authorizationService.AuthorizeAsync(User, {C.name}, ""UserOwnerOrAdmin"");
             if (!authResult.Succeeded) return Forbid();
 ";
                 }
                 else if (clsHelper.AvailableRoles.Count > 0)
                 {
-                    // if it is a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during existence checks
                     roles = clsHelper.AvailableRoles[0];
                 }
             }
 
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
+            string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
         /// Checks whether a record exists based on the provided criteria.
         /// </summary>
-        /// <param name=""{C.name}"">The field value to look up.</param>
-        /// <returns>An IActionResult containing a boolean flag indicating existence.</returns>
-        /// <response code=""200"">Returns true if the record exists, otherwise false.</response>
         {authAttribute}
         [HttpGet(""{route}"")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name}{serviceInjection})
-        {{{ownershipCheck}            bool exists = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
+        {{{ownershipCheck}      
+            bool exists = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
             return Ok(exists);
         }}
 ";
@@ -561,28 +525,19 @@ namespace Shared
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
 
-            // if it is a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during paging
             if (isUser && clsHelper.AvailableRoles.Count > 0)
             {
                 roles = clsHelper.AvailableRoles[0];
             }
-
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
+            string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
         /// Retrieves a paginated list of records based on query filters.
         /// </summary>
-        /// <param name=""rowsPerPage"">The total number of rows per page.</param>
-        /// <param name=""pageNumber"">The active page index.</param>
-        /// <param name=""sortColumn"">The specific table column to sort by.</param>
-        /// <param name=""direction"">The sorting direction constraint ('ASC' or 'DESC').</param>
-        /// <returns>An IActionResult containing the filtered collection of Brief DTOs.</returns>
-        /// <response code=""200"">Returns the paginated data collection matching criteria.</response>
         {authAttribute}
         [HttpGet(""page"")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
         [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetPage([FromQuery] int rowsPerPage = 10, [FromQuery] int pageNumber = 1, [FromQuery] string sortColumn = ""{clsHelper.Columns[0].name}"", [FromQuery] string direction = ""ASC"")
         {{
@@ -600,25 +555,20 @@ namespace Shared
 
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
 
-            // if it is a user table, force the role to be the Highest available role (first in the list) to prevent privilege escalation during creation
             if (isUser && clsHelper.AvailableRoles.Count > 0)
             {
                 roles = clsHelper.AvailableRoles[0];
             }
 
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
+            string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
         /// Retrieves all matching records in brief format filtered by a specific column.
         /// </summary>
-        /// <param name=""{C.name}"">The lookup criterion value.</param>
-        /// <returns>An IActionResult containing a collection of Brief DTOs.</returns>
-        /// <response code=""200"">Returns the list of brief format entries.</response>
         {authAttribute}
         [HttpGet(""{route}"")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
         [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name})
         {{
@@ -636,25 +586,20 @@ namespace Shared
 
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
 
-            // if it is a user table, restrict access to the highest available role (first in the list) to prevent unauthorized data exposure
             if (isUser && clsHelper.AvailableRoles.Count > 0)
             {
                 roles = clsHelper.AvailableRoles[0];
             }
 
-            string authAttribute = (roles.ToLower() == "anonymous")
-                ? "[AllowAnonymous]"
-                : $"[Authorize(Roles = \"{roles}\")]";
+            string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
         /// Retrieves all matching records in full format filtered by a specific column.
         /// </summary>
-        /// <param name=""{C.name}"">The lookup criterion value.</param>
-        /// <returns>An IActionResult containing a collection of Full DTOs.</returns>
-        /// <response code=""200"">Returns the list of full format entries.</response>
         {authAttribute}
         [HttpGet(""{route}"")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
         [ProducesResponseType(typeof(List<{clsHelper.className}FullDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name})
         {{
@@ -662,6 +607,25 @@ namespace Shared
             return Ok(list);
         }}
 ";
+        }
+
+        public static string ProjectPolicies()
+        {
+            return $@"using System;
+
+namespace Shared
+{{
+    public static class clsProjectPolicies
+    {{
+        // Authorization Policies
+        public const string UserOwnerOrAdmin = ""UserOwnerOrAdmin"";
+
+        // Rate Limiting Policies
+        public const string AuthPolicy = ""AuthPolicy"";
+        public const string WritePolicy = ""WritePolicy"";
+        public const string ReadPolicy = ""ReadPolicy"";
+    }}
+}}";
         }
 
         public static string controllerStructure(StringBuilder injectedActions)
