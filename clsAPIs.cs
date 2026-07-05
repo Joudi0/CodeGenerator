@@ -33,7 +33,7 @@ namespace CodeGenerator
                     Properties += $"{tabs}public {col.type} {col.name} {{ get; set; }}\n";
 
                     // 2. Dynamically construct and append the clean Nested Brief DTO property
-                    string baseEntity = GetCleanClassName(col.name);
+                    string baseEntity = clsHelper.GetCleanClassName(col.name);
                     string dtoType = "cls" + baseEntity + "BriefDTO";
                     string propName = char.ToUpper(col.name.Substring(0, col.name.Length - 2)[0]) + col.name.Substring(0, col.name.Length - 2).Substring(1) + "Details";
 
