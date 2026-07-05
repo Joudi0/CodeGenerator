@@ -104,8 +104,8 @@ namespace CodeGenerator
             clsHelper.mappedColumns = clsHelper.mappingTheColumns();
             clsHelper.ColumnsForCsharp = clsHelper.getColumnsForCsharp();
 
-            // Dynamic default role selection from the initialized database roles list
-            string defaultRole = clsHelper.AvailableRoles.Count > 1 ? clsHelper.AvailableRoles[0] + "," + clsHelper.AvailableRoles[1] : "Admin,User";
+            // FIX: اعتماد الأدوار الافتراضية المحددة من أول تشغيلة للبرنامج مية بالمية
+            string defaultRole = _globalDefaultRole;
 
             // =========================================================
             // 1. Dictatoric way for User Table (Auto Generate All Actions)
@@ -136,21 +136,23 @@ namespace CodeGenerator
 
                 // Forced GetByUsername method for User table restricted to Admin/Default role
                 clsHelper.Column usernameColumn = clsHelper.Columns.Find(c => c.name.ToLower().Contains("username"));
+                clsHelper.Column usernameColumnCsharp = clsHelper.ColumnsForCsharp.Find(c => c.name == usernameColumn.name);
 
-                if (string.IsNullOrEmpty(usernameColumn.name))
+                // FIX: البحث في لستة الكاش لـ ColumnsForCsharp منعاً لتسلل الـ nvarchar للـ Fallback
+                if (usernameColumnCsharp.name == null)
                 {
-                    usernameColumn = clsHelper.Columns.Find(c => c.name.ToLower().Contains("user")
+                    usernameColumnCsharp = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("user")
                         && !c.name.ToLower().Contains("id")
                         && !c.name.ToLower().Contains("role"));
                 }
 
-                if (!string.IsNullOrEmpty(usernameColumn.name))
+                if (!string.IsNullOrEmpty(usernameColumnCsharp.name))
                 {
                     clsHelper.allSPs.Add(clsSPs.selectByColumnSP(usernameColumn));
-                    DALFuncs.Append(clsDAL.getRecordByColumnFunc(usernameColumn));
-                    BLLFuncs.Append(clsBLL.getByFunc(usernameColumn));
-                    BLLFuncs.Append(clsBLL.getBriefFunc(usernameColumn));
-                    Controller.Append(clsAPIs.getByAction(usernameColumn, defaultRole));
+                    DALFuncs.Append(clsDAL.getRecordByColumnFunc(usernameColumnCsharp));
+                    BLLFuncs.Append(clsBLL.getByFunc(usernameColumnCsharp));
+                    BLLFuncs.Append(clsBLL.getBriefFunc(usernameColumnCsharp));
+                    Controller.Append(clsAPIs.getByAction(usernameColumnCsharp, defaultRole));
                 }
 
                 // Update is forced for user table and ownership policy
@@ -255,16 +257,17 @@ namespace CodeGenerator
                         List<string> getByColumns = clsPresentation.getBy();
                         foreach (string colName in getByColumns)
                         {
-                            clsHelper.Column column = clsHelper.makeColumnByName(colName);
-                            clsHelper.allSPs.Add(clsSPs.selectByColumnSP(column));
-                            DALFuncs.Append(clsDAL.getRecordByColumnFunc(column));
-                            BLLFuncs.Append(clsBLL.getByFunc(column));
-                            BLLFuncs.Append(clsBLL.getBriefFunc(column));
+                            clsHelper.Column columnSql = clsHelper.makeColumnByName(colName);
+                            clsHelper.Column columnCsharp = clsHelper.mappedColumns.Find(c => c.name == colName);
+
+                            clsHelper.allSPs.Add(clsSPs.selectByColumnSP(columnSql));
+                            DALFuncs.Append(clsDAL.getRecordByColumnFunc(columnCsharp));
+                            BLLFuncs.Append(clsBLL.getByFunc(columnCsharp));
+                            BLLFuncs.Append(clsBLL.getBriefFunc(columnCsharp));
 
                             string getByRoles = clsPresentation.PromptForActionRoles($"GetBy{colName}");
-                            Controller.Append(clsAPIs.getByAction(column, getByRoles));
+                            Controller.Append(clsAPIs.getByAction(columnCsharp, getByRoles));
                         }
-
                     }
 
                     // Custom Exist By
@@ -275,13 +278,15 @@ namespace CodeGenerator
                         List<string> existColumns = clsPresentation.existBy();
                         foreach (string colName in existColumns)
                         {
-                            clsHelper.Column column = clsHelper.makeColumnByName(colName);
-                            clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(column));
-                            DALFuncs.Append(clsDAL.isExistsFunc(column));
-                            BLLFuncs.Append(clsBLL.isExistsFunc(column));
+                            clsHelper.Column columnSql = clsHelper.makeColumnByName(colName);
+                            clsHelper.Column columnCsharp = clsHelper.mappedColumns.Find(c => c.name == colName);
+
+                            clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(columnSql));
+                            DALFuncs.Append(clsDAL.isExistsFunc(columnCsharp));
+                            BLLFuncs.Append(clsBLL.isExistsFunc(columnCsharp));
 
                             string existRoles = clsPresentation.PromptForActionRoles($"ExistsBy{colName}");
-                            Controller.Append(clsAPIs.isExistAction(column, existRoles));
+                            Controller.Append(clsAPIs.isExistAction(columnCsharp, existRoles));
                         }
                     }
 
@@ -293,15 +298,17 @@ namespace CodeGenerator
                         List<string> getAllByColumns = clsPresentation.getAllBy();
                         foreach (string colName in getAllByColumns)
                         {
-                            clsHelper.Column column = clsHelper.makeColumnByName(colName);
-                            clsHelper.allSPs.Add(clsSPs.selectAllBySP(column));
-                            DALFuncs.Append(clsDAL.getAllByColumnFunc(column));
-                            BLLFuncs.Append(clsBLL.getAllBriefByFunc(column));
-                            BLLFuncs.Append(clsBLL.getAllFullByFunc(column));
+                            clsHelper.Column columnSql = clsHelper.makeColumnByName(colName);
+                            clsHelper.Column columnCsharp = clsHelper.mappedColumns.Find(c => c.name == colName);
+
+                            clsHelper.allSPs.Add(clsSPs.selectAllBySP(columnSql));
+                            DALFuncs.Append(clsDAL.getAllByColumnFunc(columnCsharp));
+                            BLLFuncs.Append(clsBLL.getAllBriefByFunc(columnCsharp));
+                            BLLFuncs.Append(clsBLL.getAllFullByFunc(columnCsharp));
 
                             string getAllByRoles = clsPresentation.PromptForActionRoles($"GetAllBy{colName}");
-                            Controller.Append(clsAPIs.getAllBriefByAction(column, getAllByRoles));
-                            Controller.Append(clsAPIs.getAllFullByAction(column, getAllByRoles));
+                            Controller.Append(clsAPIs.getAllBriefByAction(columnCsharp, getAllByRoles));
+                            Controller.Append(clsAPIs.getAllFullByAction(columnCsharp, getAllByRoles));
                         }
                     }
                 }

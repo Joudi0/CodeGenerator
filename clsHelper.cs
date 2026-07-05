@@ -311,7 +311,6 @@ namespace CodeGenerator
             RunDotNetCommand(dalFolder, "add reference ../Shared/Shared.csproj");
             RunDotNetCommand(bllFolder, "add reference ../Shared/Shared.csproj");
             RunDotNetCommand(webApiFolder, "add reference ../Shared/Shared.csproj");
-
             // Deleting extra files
             if (File.Exists(dalClass1)) File.Delete(dalClass1);
             if (File.Exists(bllClass1)) File.Delete(bllClass1);
@@ -512,6 +511,8 @@ namespace Shared
             clsHelper.TrackClass(3);
 
             RunDotNetCommand(webApiFolder, "add package Microsoft.AspNetCore.Authentication.JwtBearer");
+            RunDotNetCommand(dalFolder, "add package Microsoft.Data.SqlClient");
+            RunDotNetCommand(webApiFolder, "add package Microsoft.Data.SqlClient");
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
