@@ -281,8 +281,7 @@ namespace CodeGenerator
             RunDotNetCommand(targetDirectory, "new classlib -n BLL -f net10.0");
             RunDotNetCommand(targetDirectory, "new classlib -n Shared -f net10.0");
             RunDotNetCommand(targetDirectory, "new webapi -n WebAPI -f net10.0"); // PL
-
-            RunDotNetCommand(targetDirectory, $"sln {solutionName}.slnx add Shared/Shared.csproj DAL/DAL.csproj BLL/BLL.csproj WebAPI/WebAPI.csproj");
+            RunDotNetCommand(targetDirectory, $"sln {solutionName}.slnx add WebAPI/WebAPI.csproj BLL/BLL.csproj DAL/DAL.csproj Shared/Shared.csproj");
 
             // Main Folders/Libraries
             string dalFolder = Path.Combine(targetDirectory, "DAL");
@@ -332,6 +331,7 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -354,7 +354,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddRateLimiter((Microsoft.AspNetCore.RateLimiting.RateLimiterOptions options) =>
 {
     options.RejectionStatusCode = Microsoft.AspNetCore.Http.StatusCodes.Status429TooManyRequests;
-
+    
     // Handle rejected requests globally and return a clean JSON message
     options.OnRejected = async (Microsoft.AspNetCore.RateLimiting.OnRejectedContext context, System.Threading.CancellationToken token) =>
     {
@@ -363,32 +363,34 @@ builder.Services.AddRateLimiter((Microsoft.AspNetCore.RateLimiting.RateLimiterOp
         await context.HttpContext.Response.WriteAsync(errorMessage, System.Text.Encoding.UTF8, token);
     };
 
-   // 1. Strict Policy
-options.AddFixedWindowLimiter(""AuthPolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
-{
-    fixedOptions.PermitLimit = 5;
-    fixedOptions.Window = TimeSpan.FromMinutes(1);
-    fixedOptions.QueueLimit = 0;
-    fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+    // 1. Strict Policy for Authentication endpoints (5 requests per minute)
+    options.AddFixedWindowLimiter(""AuthPolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+    {
+        fixedOptions.PermitLimit = 5;
+        fixedOptions.Window = TimeSpan.FromMinutes(1);
+        fixedOptions.QueueLimit = 0;
+        fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+    });
+
+    // 2. Medium Policy for Write operations like Add, Update, Delete (30 requests per minute)
+    options.AddFixedWindowLimiter(""WritePolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+    {
+        fixedOptions.PermitLimit = 30;
+        fixedOptions.Window = TimeSpan.FromMinutes(1);
+        fixedOptions.QueueLimit = 2;
+        fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+    });
+
+    // 3. Loose Policy for Read operations like Get, Paging, GetAll (100 requests per minute)
+    options.AddFixedWindowLimiter(""ReadPolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+    {
+        fixedOptions.PermitLimit = 100;
+        fixedOptions.Window = TimeSpan.FromMinutes(1);
+        fixedOptions.QueueLimit = 5;
+        fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+    });
 });
 
-// 2. Medium Policy
-options.AddFixedWindowLimiter(""WritePolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
-{
-    fixedOptions.PermitLimit = 30;
-    fixedOptions.Window = TimeSpan.FromMinutes(1);
-    fixedOptions.QueueLimit = 2;
-    fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
-});
-
-// 3. Loose Policy
-options.AddFixedWindowLimiter(""ReadPolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
-{
-    fixedOptions.PermitLimit = 100;
-    fixedOptions.Window = TimeSpan.FromMinutes(1);
-    fixedOptions.QueueLimit = 5;
-    fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
-});
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
@@ -439,7 +441,6 @@ foreach (System.Type handler in handlerTypes)
 builder.Services.AddControllers(); 
 
 WebApplication app = builder.Build();
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -452,6 +453,7 @@ app.UseRateLimiter(); // Activated the rate limiting middleware inside the pipel
 app.UseAuthorization();
 app.MapControllers();
 app.Run();";
+
             File.WriteAllText(programCsPath, cleanProgramCode);
             TrackLines(cleanProgramCode);
 
@@ -541,8 +543,8 @@ namespace Shared
                 FileName = "dotnet",
                 Arguments = arguments,
                 WorkingDirectory = workingDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
@@ -596,6 +598,19 @@ namespace Shared
             {
                 TotalLinesGenerated += code.Split('\n').Length;
             }
+        }
+
+        public static string GetCleanClassName(string columnName)
+        {
+            string lower = columnName.ToLower();
+            if (lower.Contains("user")) return "User";
+            if (lower.Contains("person")) return "Person";
+            if (lower.Contains("application")) return "Application";
+            if (lower.Contains("license")) return "License";
+            string clean = columnName.EndsWith("ID", StringComparison.OrdinalIgnoreCase)
+                ? columnName.Substring(0, columnName.Length - 2)
+                : columnName;
+            return char.ToUpper(clean[0]) + clean.Substring(1);
         }
 
         public static List<string> GetAllTables()

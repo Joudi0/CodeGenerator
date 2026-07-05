@@ -107,15 +107,16 @@ namespace CodeGenerator
             {
                 if (col.composition)
                 {
+                    string baseEntity = GetCleanClassName(col.name);
+                    string targetBLL = "cls" + baseEntity;
+                    string propName = char.ToUpper(col.name.Substring(0, col.name.Length - 2)[0]) + col.name.Substring(0, col.name.Length - 2).Substring(1) + "Details";
                     string cleanName = col.name.Substring(0, col.name.Length - 2);
-                    string targetBLL = "cls" + char.ToUpper(cleanName[0]) + cleanName.Substring(1);
-                    string propName = char.ToUpper(cleanName[0]) + cleanName.Substring(1) + "Details";
 
                     compositionPopulation.AppendLine();
                     compositionPopulation.AppendLine($"            // Directly populate nested object using the single Brief method");
                     compositionPopulation.AppendLine($"            if (fullDto.{col.name} != default)");
                     compositionPopulation.AppendLine($"            {{");
-                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{char.ToUpper(cleanName[0])}{cleanName.Substring(1)}BriefByID(fullDto.{col.name});");
+                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{baseEntity}BriefByID(fullDto.{col.name});");
                     compositionPopulation.AppendLine($"            }}");
                 }
             }
