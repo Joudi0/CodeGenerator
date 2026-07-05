@@ -163,41 +163,131 @@ namespace Shared
 }}";
         }
 
+        public static string TokenResponseDTO()
+        {
+            string DTO = $@"using System;
+
+namespace Shared
+{{
+    public class TokenResponseDTO
+    {{
+        public string AccessToken {{ get; set; }}
+        public string RefreshToken {{ get; set; }}
+    }}
+}}";
+            return DTO;
+        }
+
+        public static string RefreshRequestDTO()
+        {
+            string DTO = $@"using System;
+
+namespace Shared
+{{
+    public class RefreshRequestDTO
+    {{
+        public int UserID {{ get; set; }}
+        public string Username {{ get; set; }}
+        public string RefreshToken {{ get; set; }}
+    }}
+}}";
+            return DTO;
+        }
+
+        public static string LogoutRequestDTO()
+        {
+            string DTO = $@"using System;
+
+namespace Shared
+{{
+    public class LogoutRequestDTO
+    {{
+        public int UserID {{ get; set; }}
+        public string RefreshToken {{ get; set; }}
+    }}
+}}";
+            return DTO;
+        }
         // ==========================================
         //  Web API Controllers
         // ==========================================
-
         public static string loginAction()
         {
             return $@"
         /// <summary>
-        /// Authenticates a user and generates a secure JWT token.
+        /// Authenticates a user and returns separate short-lived Access Token and secure Refresh Token.
         /// </summary>
-        /// <param name=""loginDto"">The user credentials container.</param>
-        /// <param name=""tokenService"">The injected JWT token generation service.</param>
-        /// <returns>An IActionResult containing the generated access token.</returns>
-        /// <response code=""200"">Returns the secure JWT token upon successful authentication.</response>
-        /// <response code=""400"">If the credentials are null or empty.</response>
-        /// <response code=""401"">If the username or password is invalid.</response>
         [HttpPost(""login"")]
-        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(TokenResponseDTO), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Login([FromBody] LoginRequestDTO loginDto, [FromServices] clsTokenService tokenService)
         {{
             if (loginDto == null || string.IsNullOrEmpty(loginDto.Username) || string.IsNullOrEmpty(loginDto.Password))
                 return BadRequest(""Username and Password are required."");
 
-            // Verify credentials via BLL which now returns the AuthDTO object
             AuthDTO authData = await {clsHelper.className}.checkLogin(loginDto.Username, loginDto.Password);
-            
             if (authData == null) 
                 return Unauthorized(""Invalid username or password."");
 
-            // FIXED: Using UserRoleID instead of Role to match AuthDTO properties
-            var token = tokenService.GenerateJWTToken(authData.UserID, loginDto.Username, authData.UserRoleID.ToString());    
+            string accessToken = tokenService.GenerateAccessToken(authData.UserID, loginDto.Username, authData.UserRoleID.ToString());
+            string refreshToken = await tokenService.GenerateAndSaveRefreshTokenAsync(authData.UserID);
 
-            return Ok(new {{ Token = token }});
+            return Ok(new TokenResponseDTO
+            {{
+                AccessToken = accessToken,
+                RefreshToken = refreshToken
+            }});
+        }}
+";
+        }
+
+        public static string refreshAction()
+        {
+            return $@"
+        /// <summary>
+        /// Rotates the refresh token and grants a new access token using RefreshRequestDTO.
+        /// </summary>
+        [HttpPost(""refresh"")]
+        [ProducesResponseType(typeof(TokenResponseDTO), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Refresh([FromBody] RefreshRequestDTO request, [FromServices] clsTokenService tokenService)
+        {{
+            if (request == null || string.IsNullOrEmpty(request.RefreshToken))
+                return BadRequest(""Invalid client request. RefreshToken is required."");
+
+            // Validate the old token and execute rotation in the database
+            int isValidToken = await tokenService.ValidateAndRevokeRefreshTokenAsync(request.UserID, request.RefreshToken);
+            if (isValidToken == -1)
+                return Unauthorized(""Invalid or expired refresh token."");
+
+            // Generate new tokens after successful validation and rotation
+            string newAccessToken = tokenService.GenerateAccessToken(request.UserID, request.Username, Shared.enRoles.User.ToString());
+            string newRefreshToken = await tokenService.GenerateAndSaveRefreshTokenAsync(request.UserID);
+
+            return Ok(new TokenResponseDTO
+            {{
+                AccessToken = newAccessToken,
+                RefreshToken = newRefreshToken
+            }});
+        }}
+";
+        }
+
+        public static string logoutAction()
+        {
+            return $@"
+        /// <summary>
+        /// Revokes the refresh token inside the database via LogoutRequestDTO.
+        /// </summary>
+        [HttpPost(""logout"")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> Logout([FromBody] LogoutRequestDTO request, [FromServices] clsTokenService tokenService)
+        {{
+            if (request == null || string.IsNullOrEmpty(request.RefreshToken))
+                return Ok(); // To prevent user enumeration attacks
+
+            await tokenService.RevokeTokenByRawAsync(request.UserID, request.RefreshToken);
+            return Ok(""Logged out successfully."");
         }}
 ";
         }
@@ -222,7 +312,7 @@ namespace Shared
 
             try
             {{
-                // Calling the dynamic dynamic BLL method we created earlier
+                // Calling the dynamic BLL method created earlier
                 int insertedId = await {clsHelper.className}.RegisterUser(registerDto);
                 
                 if (insertedId == -1)

@@ -556,106 +556,244 @@ namespace Shared
 
         public static async Task Auth()
         {
-        string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
-        // 1. Adding clsTokenService to WebAPI project
-        string webApiServicesFolder = Path.Combine(_projectDirectory, "WebAPI", "Services");
+            string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
+            string webApiServicesFolder = Path.Combine(_projectDirectory, "WebAPI", "Services");
             if (!Directory.Exists(webApiServicesFolder)) Directory.CreateDirectory(webApiServicesFolder);
 
+            // Ensure the database table exists with hashing and UTC time
+            string ensureTokensTableSql = @"
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'UserTokens')
+        BEGIN
+            CREATE TABLE UserTokens (
+                TokenID INT IDENTITY(1,1) PRIMARY KEY,
+                UserID INT NOT NULL,
+                RefreshTokenHash NVARCHAR(256) NOT NULL UNIQUE,
+                ExpiryDate DATETIME NOT NULL,
+                RevokedAt DATETIME NULL
+            );
+        END";
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                {
+                    await conn.OpenAsync();
+                    using (SqlCommand cmd = new SqlCommand(ensureTokensTableSql, conn))
+                    {
+                        await cmd.ExecuteNonQueryAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\n[red]Database Error during Token Table initialization:[/] {ex.Message}");
+            }
+
+            // Token service supporting generation, validation, and DB persistence with explicit types
             string clsTokenServicePath = Path.Combine(webApiServicesFolder, "clsTokenService.cs");
             string clsTokenService = @"using System;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Data.SqlClient;
+using System.Threading.Tasks;
 
 namespace WebAPI.Services
 {
     public class clsTokenService
     {
         private readonly IConfiguration _configuration;
+        private readonly string _connectionString;
         
         public clsTokenService(IConfiguration configuration)
         {
             _configuration = configuration;
+            _connectionString = _configuration.GetConnectionString(""DefaultConnection"");
         }
 
-        public string GenerateJWTToken( int userId, string username, string RoleName)
+        public string GenerateAccessToken(int userId, string username, string RoleName)
         {
-            var jwtSettings = _configuration.GetSection(""JwtSettings"");
-            var secretKey = jwtSettings[""SecretKey""];
-            var issuer = jwtSettings[""Issuer""];
-            var audience = jwtSettings[""Audience""];
-            var expirationInHours = Convert.ToDouble(jwtSettings[""ExpirationInHours""] ?? ""1"");
+            IConfigurationSection jwtSettings = _configuration.GetSection(""JwtSettings"");
+            string secretKey = jwtSettings[""SecretKey""];
+            SymmetricSecurityKey key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+            SigningCredentials creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-            var claims = new[]
+            Claim[] claims = new Claim[]
             {
                 new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
                 new Claim(ClaimTypes.Name, username),
                 new Claim(ClaimTypes.Role, RoleName)
             };
 
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken(
-                issuer: issuer,
-                audience: audience,
+            JwtSecurityToken token = new JwtSecurityToken(
+                issuer: jwtSettings[""Issuer""],
+                audience: jwtSettings[""Audience""],
                 claims: claims,
-                expires: DateTime.Now.AddHours(expirationInHours),
+                expires: DateTime.UtcNow.AddMinutes(15), // Short-lived Access Token
                 signingCredentials: creds
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        public async Task<string> GenerateAndSaveRefreshTokenAsync(int userId)
+        {
+            byte[] randomNumber = new byte[64];
+            using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(randomNumber);
+            }
+            string rawRefreshToken = Convert.ToBase64String(randomNumber);
+
+            // Hash the refresh token before storing it for maximum security
+            string tokenHash = ComputeSha256Hash(rawRefreshToken);
+
+            using (SqlConnection conn = new SqlConnection(_connectionString))
+            {
+                string query = ""INSERT INTO UserTokens (UserID, RefreshTokenHash, ExpiryDate) VALUES (@UserID, @TokenHash, @ExpiryDate)"";
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue(""@UserID"", userId);
+                    cmd.Parameters.AddWithValue(""@TokenHash"", tokenHash);
+                    cmd.Parameters.AddWithValue(""@ExpiryDate"", DateTime.UtcNow.AddDays(7)); // Long-lived expiration
+
+                    await conn.OpenAsync();
+                    await cmd.ExecuteNonQueryAsync();
+                }
+            }
+
+            return rawRefreshToken; // Return the plain token to the client only once
+        }
+
+        public async Task<int> ValidateAndRevokeRefreshTokenAsync(int userId, string rawRefreshToken)
+        {
+            string tokenHash = ComputeSha256Hash(rawRefreshToken);
+
+            using (SqlConnection conn = new SqlConnection(_connectionString))
+            {
+                // Verify the token validity and ensure it is not revoked
+                string query = ""SELECT TokenID FROM UserTokens WHERE UserID = @UserID AND RefreshTokenHash = @TokenHash AND ExpiryDate > @Now AND RevokedAt IS NULL"";
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue(""@UserID"", userId);
+                    cmd.Parameters.AddWithValue(""@TokenHash"", tokenHash);
+                    cmd.Parameters.AddWithValue(""@Now"", DateTime.UtcNow);
+
+                    await conn.OpenAsync();
+                    object result = await cmd.ExecuteScalarAsync();
+                    
+                    if (result != null)
+                    {
+                        int tokenId = Convert.ToInt32(result);
+                        // Perform Token Rotation by revoking the used token immediately
+                        await RevokeTokenByIdAsync(tokenId);
+                        return tokenId;
+                    }
+                }
+            }
+
+            return -1;
+        }
+
+        public async Task RevokeTokenByRawAsync(int userId, string rawRefreshToken)
+        {
+            string tokenHash = ComputeSha256Hash(rawRefreshToken);
+            using (SqlConnection conn = new SqlConnection(_connectionString))
+            {
+                string query = ""UPDATE UserTokens SET RevokedAt = @Now WHERE UserID = @UserID AND RefreshTokenHash = @TokenHash AND RevokedAt IS NULL"";
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue(""@UserID"", userId);
+                    cmd.Parameters.AddWithValue(""@TokenHash"", tokenHash);
+                    cmd.Parameters.AddWithValue(""@Now"", DateTime.UtcNow);
+
+                    await conn.OpenAsync();
+                    await cmd.ExecuteNonQueryAsync();
+                }
+            }
+        }
+
+        private async Task RevokeTokenByIdAsync(int tokenId)
+        {
+            using (SqlConnection conn = new SqlConnection(_connectionString))
+            {
+                string query = ""UPDATE UserTokens SET RevokedAt = @Now WHERE TokenID = @TokenID"";
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue(""@TokenID"", tokenId);
+                    cmd.Parameters.AddWithValue(""@Now"", DateTime.UtcNow);
+
+                    await conn.OpenAsync();
+                    await cmd.ExecuteNonQueryAsync();
+                }
+            }
+        }
+
+        private string ComputeSha256Hash(string rawData)
+        {
+            using (SHA256 sha256Hash = SHA256.Create())
+            {
+                byte[] bytes = sha256Hash.ComputeHash(Encoding.UTF8.GetBytes(rawData));
+                StringBuilder builder = new StringBuilder();
+                for (int i = 0; i < bytes.Length; i++)
+                {
+                    builder.Append(bytes[i].ToString(""x2""));
+                }
+                return builder.ToString();
+            }
         }
     }
 }";
             File.WriteAllText(clsTokenServicePath, clsTokenService);
             TrackLines(clsTokenService);
 
-            // 2. Adding AuthDTO to Shared/DTOs/Auth folder
-            string authDto = Path.Combine(_projectDirectory, "Shared", "DTOs", "Auth");
-            if (!Directory.Exists(authDto)) Directory.CreateDirectory(authDto);
+            // Generate folders and inject separate DTO classes for tokens
+            string authDtoFolder = Path.Combine(_projectDirectory, "Shared", "DTOs", "Auth");
+            if (!Directory.Exists(authDtoFolder)) Directory.CreateDirectory(authDtoFolder);
 
-            string AuthDTOPath = Path.Combine(authDto, "AuthDTO.cs");
+            // Writing Token Response DTO
+            string tokenResponseCode = clsAPIs.TokenResponseDTO();
+            File.WriteAllText(Path.Combine(authDtoFolder, "TokenResponseDTO.cs"), tokenResponseCode);
+            TrackLines(tokenResponseCode);
+
+            // Writing Refresh Request DTO
+            string refreshRequestCode = clsAPIs.RefreshRequestDTO();
+            File.WriteAllText(Path.Combine(authDtoFolder, "RefreshRequestDTO.cs"), refreshRequestCode);
+            TrackLines(refreshRequestCode);
+
+            // Writing Logout Request DTO
+            string logoutRequestCode = clsAPIs.LogoutRequestDTO();
+            File.WriteAllText(Path.Combine(authDtoFolder, "LogoutRequestDTO.cs"), logoutRequestCode);
+            TrackLines(logoutRequestCode);
+            // Remainder of the method for building controller and enums
+            string AuthDTOPath = Path.Combine(authDtoFolder, "AuthDTO.cs");
             string AuthDTOCode = clsAPIs.SecurityDTO();
-            using (StreamWriter writer = new StreamWriter(AuthDTOPath))
-            {
-                await writer.WriteAsync(AuthDTOCode);
-            }
-            TrackLines(AuthDTOCode);
+            using (StreamWriter writer = new StreamWriter(AuthDTOPath)) { await writer.WriteAsync(AuthDTOCode); }
 
-            // 3. Adding RegisterRequestDTO to Shared/DTOs/Auth folder
-            string RegisterRequestDTOPath = Path.Combine(authDto, "RegisterRequestDTO.cs");
+            string RegisterRequestDTOPath = Path.Combine(authDtoFolder, "RegisterRequestDTO.cs");
             string RegisterRequestDTOCode = clsAPIs.RegisterRequestDTO();
-            using (StreamWriter writer = new StreamWriter(RegisterRequestDTOPath))
-            {
-                await writer.WriteAsync(RegisterRequestDTOCode);
-            }
-            TrackLines(RegisterRequestDTOCode);
+            using (StreamWriter writer = new StreamWriter(RegisterRequestDTOPath)) { await writer.WriteAsync(RegisterRequestDTOCode); }
 
-            // 4. Adding LoginRequestDTO to Shared/DTOs/Auth folder
-            string loginRequestDTOPath = Path.Combine(authDto, "LoginRequestDTO.cs");
-            string loginRequestDTOCode = @"namespace Shared
-{
-    public class LoginRequestDTO
-    {
-        public string Username { get; set; }
-        public string Password { get; set; }
-    }
-}";
+            string loginRequestDTOPath = Path.Combine(authDtoFolder, "LoginRequestDTO.cs");
+            string loginRequestDTOCode = "namespace Shared\n{\n    public class LoginRequestDTO\n    {\n        public string Username { get; set; }\n        public string Password { get; set; }\n    }\n}";
             File.WriteAllText(loginRequestDTOPath, loginRequestDTOCode);
-            TrackLines(loginRequestDTOCode);
 
-            // 5. Creating the actual AuthController.cs file with dynamic endpoints
+            string tokenRequestDTOPath = Path.Combine(authDtoFolder, "TokenRequestDTO.cs");
+            string tokenRequestDTOCode = "namespace Shared\n{\n    public class TokenRequestDTO\n    {\n        public string AccessToken { get; set; }\n        public string RefreshToken { get; set; }\n    }\n}";
+            File.WriteAllText(tokenRequestDTOPath, tokenRequestDTOCode);
+
             string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
             if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
             string authControllerPath = Path.Combine(controllersFolder, "AuthController.cs");
 
-            // Combine both login and register string builders
             StringBuilder authActions = new StringBuilder();
             authActions.Append(clsAPIs.loginAction());
             authActions.Append(clsAPIs.registerAction());
+            authActions.Append(clsAPIs.refreshAction());
+            authActions.Append(clsAPIs.logoutAction());
 
             string fullAuthControllerCode = $@"using BLL;
 using Microsoft.AspNetCore.Mvc;
@@ -663,6 +801,7 @@ using Microsoft.AspNetCore.Http;
 using System.Threading.Tasks;
 using WebAPI.Services;
 using Shared;
+using System;
 
 namespace WebAPI.Controllers
 {{
@@ -674,93 +813,6 @@ namespace WebAPI.Controllers
     }}
 }}";
             File.WriteAllText(authControllerPath, fullAuthControllerCode);
-            TrackLines(fullAuthControllerCode);
-
-            // 6. Adding enRoles enum dynamically from DB to Shared/Enums folder
-            Console.Write("-> Making Dynamic Roles Enum... ");
-            string enumsFolder = Path.Combine(_projectDirectory, "Shared", "Enums"); //
-            if (!Directory.Exists(enumsFolder)) Directory.CreateDirectory(enumsFolder);
-
-            StringBuilder enumMembers = new StringBuilder();
-            string fetchRolesSql = "SELECT RoleID, RoleName FROM Roles ORDER BY RoleID;";
-
-            using (Microsoft.Data.SqlClient.SqlConnection conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
-            {
-                using (Microsoft.Data.SqlClient.SqlCommand cmd = new Microsoft.Data.SqlClient.SqlCommand(fetchRolesSql, conn))
-                {
-                    await conn.OpenAsync();
-                    using (Microsoft.Data.SqlClient.SqlDataReader reader = await cmd.ExecuteReaderAsync())
-                    {
-                        while (await reader.ReadAsync())
-                        {
-                            int roleId = reader.GetInt32(0);
-                            string roleName = reader.GetString(1).Replace(" ", ""); // clean up role name for enum
-                            enumMembers.AppendLine($"        {roleName} = {roleId},");
-                        }
-                    }
-                }
-            }
-
-            string enumCode = $@"namespace Shared
-{{
-    public enum enRoles
-    {{
-{enumMembers.ToString().TrimEnd('\n', '\r', ',')}
-    }}
-}}";
-
-            string enumPath = Path.Combine(enumsFolder, "enRoles.cs");
-            File.WriteAllText(enumPath, enumCode);
-            TrackLines(enumCode);
-            Console.WriteLine("[Done]");
-            // 7. Adding Policy-Based Authorization Core Components to WebAPI
-            string authorizationFolder = Path.Combine(_projectDirectory, "WebAPI", "Authorization");
-            if (!Directory.Exists(authorizationFolder)) Directory.CreateDirectory(authorizationFolder);
-
-            string requirementCode = @"using Microsoft.AspNetCore.Authorization;
-
-namespace WebAPI.Authorization
-{
-    public class UserOwnerOrAdminRequirement : IAuthorizationRequirement
-    {
-    }
-}";
-            File.WriteAllText(Path.Combine(authorizationFolder, "UserOwnerOrAdminRequirement.cs"), requirementCode);
-
-            string handlerCode = @"using Microsoft.AspNetCore.Authorization;
-using System.Security.Claims;
-using System.Threading.Tasks;
-
-namespace WebAPI.Authorization
-{
-    public class UserOwnerOrAdminHandler : AuthorizationHandler<UserOwnerOrAdminRequirement, int>
-    {
-        protected override Task HandleRequirementAsync(
-            AuthorizationHandlerContext context, 
-            UserOwnerOrAdminRequirement requirement, 
-            int resourceUserId)
-        {
-            // Admin override (Full Access)
-            if (context.User.IsInRole(""Admin""))
-            {
-                context.Succeed(requirement);
-                return Task.CompletedTask;
-            }
-
-            // Ownership check using dynamic runtime resource comparison
-            var currentUserIdClaim = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            if (int.TryParse(currentUserIdClaim, out int authenticatedUserId) &&
-                authenticatedUserId == resourceUserId)
-            {
-                context.Succeed(requirement);
-            }
-
-            return Task.CompletedTask;
-        }
-    }
-}";
-            File.WriteAllText(Path.Combine(authorizationFolder, "UserOwnerOrAdminHandler.cs"), handlerCode);
         }
 
         public static void debugThing(object obj)
