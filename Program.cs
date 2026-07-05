@@ -42,19 +42,26 @@ namespace CodeGenerator
 
             foreach (string tName in databaseTables)
             {
+                while (Console.KeyAvailable) Console.ReadKey(true);
+
                 if (AnsiConsole.Confirm($"Do you want to generate code for table [green]{tName}[/]?"))
                 {
                     await Run(tName);
-                    Console.Clear();
+                    Console.Clear(); 
                     AnsiConsole.Write(new FigletText("ADO Gen Code").Centered().Color(Color.Green));
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.WriteLine();
                 }
             }
-
             // Finished generating code for all tables
             AnsiConsole.WriteLine();
+
             Panel signaturePanel = new Panel(
                 new Markup(
-                    $"[bold gold1]🚀 Total Code Generated:[/] [bold green]{TotalLinesGenerated:N0} lines of clean code![/]\n\n" +
+                    $"[bold gold1]🚀 Total Code Generated:[/] [bold green]{TotalLinesGenerated:N0} lines of clean code![/]\n" +
+                    $"[bold gold1]📦 Total Classes Generated:[/] [bold green]{clsHelper.TotalClasses} classes[/]\n" +
+                    $"[bold gold1]📜 Total DTOs Generated:[/] [bold green]{clsHelper.TotalDTOs} DTOs[/]\n" +
+                    $"[bold gold1]🔥 Total SPs Injected:[/] [bold green]{clsHelper.TotalSPs} Stored Procedures[/]\n\n" +
                     "[bold white]Developed with ❤️ by:[/] [bold green]Joudi[/]\n" +
                     "[bold white]Telegram:[/] [blue]@Joudi_Adeeb[/]\n" +
                     "[bold white]LinkedIn:[/] [blue]linkedin.com/in/joudi-adeeb[/]"
@@ -65,6 +72,7 @@ namespace CodeGenerator
             .Padding(2, 1)
             .RoundedBorder()
             .Expand();
+
             AnsiConsole.Write(signaturePanel);
             AnsiConsole.MarkupLine("\n[grey]Press any key to exit...[/]");
             Console.ReadKey();
@@ -398,18 +406,6 @@ namespace CodeGenerator
                 clsHelper.TrackClass(3);
                 clsHelper.TrackDTO(2);
                 Console.WriteLine("[Done]");
-
-                Panel signaturePanel = new Panel(
-    new Markup(
-        $"[bold gold1]🚀 Total Code Generated:[/] [bold green]{TotalLinesGenerated:N0} lines of clean code![/]\n" +
-        $"[bold gold1]📦 Total Classes Generated:[/] [bold green]{clsHelper.TotalClasses} classes[/]\n" +
-        $"[bold gold1]📜 Total DTOs Generated:[/] [bold green]{clsHelper.TotalDTOs} DTOs[/]\n" +
-        $"[bold gold1]🔥 Total SPs Injected:[/] [bold green]{clsHelper.TotalSPs} Stored Procedures[/]\n\n" +
-        "[bold white]Developed with ❤️ by:[/] [bold green]Joudi[/]\n" +
-        "[bold white]Telegram:[/] [blue]@Joudi_Adeeb[/]\n" +
-        "[bold white]LinkedIn:[/] [blue]linkedin.com/in/joudi-adeeb[/]"
-    )
-);
             }
             catch (Exception ex)
             {

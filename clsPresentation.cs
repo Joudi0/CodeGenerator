@@ -90,7 +90,14 @@ namespace CodeGenerator
 
             Console.Write("Enter choice numbers separated by commas (e.g., 1,2) or single choice: ");
             string input = Console.ReadLine();
-
+            int choice = 0;
+            int.TryParse(input, out choice);
+            while (input.Length == 2 && (choice > clsHelper.AvailableRoles.Count || choice <= 0))
+            {
+                Console.Write("please enter choice between 1 and " + clsHelper.AvailableRoles.Count);
+                input = Console.ReadLine();
+                int.TryParse(input, out choice);
+            }
             // Handle empty or whitespace inputs default to Anonymous or handle gracefully
             if (string.IsNullOrWhiteSpace(input)) return "Anonymous";
 
@@ -103,9 +110,9 @@ namespace CodeGenerator
             // Parsing choices and joining selected roles into a comma-separated string
             List<string> selectedRoles = new List<string>();
             var choices = input.Split(',');
-            foreach (var choice in choices)
+            foreach (var C in choices)
             {
-                if (int.TryParse(choice.Trim(), out int index) && index > 0 && index <= clsHelper.AvailableRoles.Count)
+                if (int.TryParse(C.Trim(), out int index) && index > 0 && index <= clsHelper.AvailableRoles.Count)
                 {
                     selectedRoles.Add(clsHelper.AvailableRoles[index - 1]);
                 }

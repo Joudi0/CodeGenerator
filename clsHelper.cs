@@ -363,34 +363,32 @@ builder.Services.AddRateLimiter((Microsoft.AspNetCore.RateLimiting.RateLimiterOp
         await context.HttpContext.Response.WriteAsync(errorMessage, System.Text.Encoding.UTF8, token);
     };
 
-    // 1. Strict Policy for Authentication endpoints (5 requests per minute)
-    options.AddFixedWindowLimiter(""AuthPolicy"", (Microsoft.AspNetCore.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
-    {
-        fixedOptions.PermitLimit = 5;
-        fixedOptions.Window = TimeSpan.FromMinutes(1);
-        fixedOptions.QueueLimit = 0;
-        fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
-    });
-
-    // 2. Medium Policy for Write operations like Add, Update, Delete (30 requests per minute)
-    options.AddFixedWindowLimiter(""WritePolicy"", (Microsoft.AspNetCore.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
-    {
-        fixedOptions.PermitLimit = 30;
-        fixedOptions.Window = TimeSpan.FromMinutes(1);
-        fixedOptions.QueueLimit = 2;
-        fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
-    });
-
-    // 3. Loose Policy for Read operations like Get, Paging, GetAll (100 requests per minute)
-    options.AddFixedWindowLimiter(""ReadPolicy"", (Microsoft.AspNetCore.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
-    {
-        fixedOptions.PermitLimit = 100;
-        fixedOptions.Window = TimeSpan.FromMinutes(1);
-        fixedOptions.QueueLimit = 5;
-        fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
-    });
+   // 1. Strict Policy
+options.AddFixedWindowLimiter(""AuthPolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+{
+    fixedOptions.PermitLimit = 5;
+    fixedOptions.Window = TimeSpan.FromMinutes(1);
+    fixedOptions.QueueLimit = 0;
+    fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
 });
 
+// 2. Medium Policy
+options.AddFixedWindowLimiter(""WritePolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+{
+    fixedOptions.PermitLimit = 30;
+    fixedOptions.Window = TimeSpan.FromMinutes(1);
+    fixedOptions.QueueLimit = 2;
+    fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+});
+
+// 3. Loose Policy
+options.AddFixedWindowLimiter(""ReadPolicy"", (System.Threading.RateLimiting.FixedWindowRateLimiterOptions fixedOptions) =>
+{
+    fixedOptions.PermitLimit = 100;
+    fixedOptions.Window = TimeSpan.FromMinutes(1);
+    fixedOptions.QueueLimit = 5;
+    fixedOptions.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+});
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
@@ -532,6 +530,8 @@ namespace Shared
 
             clsHelper.TrackClass(3);
 
+            RunDotNetCommand(webApiFolder, "add package Microsoft.AspNetCore.Authentication.JwtBearer");
+            RunDotNetCommand(webApiFolder, "add package Swashbuckle.AspNetCore");
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
