@@ -41,7 +41,7 @@ namespace CodeGenerator
             clsHelper.LoadAvailableRoles();
             AnsiConsole.MarkupLine($"[cyan]Found {databaseTables.Count} tables in the database.[/]\n");
             _globalDefaultRole = clsPresentation.PromptForActionRoles("Global Default CRUD Actions");
-            Console.Write($"Enter The Prefix For all tables classes (Optional, e.g., 'cls' for Classes): ");)
+            Console.Write($"Enter The Prefix For all tables classes (Optional, e.g., 'cls' for Classes): ");
             prefix = Console.ReadLine();
             foreach (string tName in databaseTables)
             {

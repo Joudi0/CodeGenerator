@@ -439,19 +439,20 @@ app.Run();";
             string securityHelperPath = Path.Combine(sharedFolder, "clsSecurityHelper.cs");
             string securityHelperCode = @"using System;
 using System.Security.Cryptography;
-
+using System.Text;
 namespace Shared
 {
     public static class clsSecurityHelper
     {
         public static string ComputeHash(string password, string salt, int iterations = 10000)
         {
+            byte[] passwordBytes = Encoding.UTF8.GetBytes(password);
             byte[] saltBytes = Convert.FromBase64String(salt);
-            using (var pbkdf2 = new Rfc2898DeriveBytes(password, saltBytes, iterations, HashAlgorithmName.SHA256))
-            {
-                byte[] hashBytes = pbkdf2.GetBytes(32);
-                return Convert.ToBase64String(hashBytes);
-            }
+
+            // New static method for PBKDF2 hashing in .NET 10
+            byte[] hashBytes = Rfc2898DeriveBytes.Pbkdf2(passwordBytes, saltBytes, iterations, HashAlgorithmName.SHA256, 32);
+    
+            return Convert.ToBase64String(hashBytes);
         }
 
         public static string GenerateSalt(int size = 16)
@@ -514,6 +515,7 @@ namespace Shared
             RunDotNetCommand(dalFolder, "add package Microsoft.Data.SqlClient");
             RunDotNetCommand(webApiFolder, "add package Microsoft.Data.SqlClient");
             RunDotNetCommand(webApiFolder, "add package Microsoft.OpenApi");
+            RunDotNetCommand(webApiFolder, "setProperty OpenApiGenerateDocuments false");
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
