@@ -513,6 +513,7 @@ namespace Shared
             RunDotNetCommand(webApiFolder, "add package Microsoft.AspNetCore.Authentication.JwtBearer");
             RunDotNetCommand(dalFolder, "add package Microsoft.Data.SqlClient");
             RunDotNetCommand(webApiFolder, "add package Microsoft.Data.SqlClient");
+            RunDotNetCommand(webApiFolder, "add package Microsoft.OpenApi");
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)

@@ -554,10 +554,13 @@ namespace Shared
 
         public static string getAllBriefByAction(clsHelper.Column C, string roles)
         {
-            string bllMethodName = $"getAllBriefBy{C.name}";
-            string actionName = $"GetAllBriefBy{C.name}";
-            string route = $"all-brief/by/{C.name}/{{{C.name}}}";
+            int columnIndex = clsHelper.getColumnIndex(C.name);
+            string bllMethodName = (columnIndex == 0) ? "getAllBrief" : $"getAllBriefBy{C.name}";
+            string actionName = (columnIndex == 0) ? "GetAllBrief" : $"GetAllBriefBy{C.name}";
+            string route = (columnIndex == 0) ? "all-brief" : $"all-brief/by/{C.name}/{{{C.name}}}";
 
+            string BLLparam = (columnIndex == 0) ? "" : $"{C.type} {C.name}";
+            string bllCallParam = (columnIndex == 0) ? "" : C.name;
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
 
             if (isUser && clsHelper.AvailableRoles.Count > 0)
@@ -575,9 +578,9 @@ namespace Shared
         [HttpGet(""{route}"")]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
         [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> {actionName}({C.type} {C.name})
+        public async Task<IActionResult> {actionName}({BLLparam})
         {{
-            List<{clsHelper.className}BriefDTO> list = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
+            List<{clsHelper.className}BriefDTO> list = await cls{clsHelper.objectName}.{bllMethodName}({bllCallParam});
             return Ok(list);
         }}
 ";
@@ -585,10 +588,13 @@ namespace Shared
 
         public static string getAllFullByAction(clsHelper.Column C, string roles)
         {
-            string bllMethodName = $"getAllFullBy{C.name}";
-            string actionName = $"GetAllFullBy{C.name}";
-            string route = $"all-full/by/{C.name}/{{{C.name}}}";
+            int columnIndex = clsHelper.getColumnIndex(C.name);
+            string bllMethodName = (columnIndex == 0) ? "getAllFull" : $"getAllFullBy{C.name}";
+            string actionName = (columnIndex == 0) ? "GetAllFull" : $"GetAllFullBy{C.name}";
+            string route = (columnIndex == 0) ? "all-full" : $"all-full/by/{C.name}/{{{C.name}}}";
 
+            string BLLparam = (columnIndex == 0) ? "" : $"{C.type} {C.name}";
+            string bllCallParam = (columnIndex == 0) ? "" : C.name;
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
 
             if (isUser && clsHelper.AvailableRoles.Count > 0)
@@ -606,9 +612,9 @@ namespace Shared
         [HttpGet(""{route}"")]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
         [ProducesResponseType(typeof(List<{clsHelper.className}FullDTO>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> {actionName}({C.type} {C.name})
+        public async Task<IActionResult> {actionName}({BLLparam})
         {{
-            List<{clsHelper.className}FullDTO> list = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
+            List<{clsHelper.className}FullDTO> list = await cls{clsHelper.objectName}.{bllMethodName}({bllCallParam});
             return Ok(list);
         }}
 ";

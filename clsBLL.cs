@@ -7,7 +7,7 @@ namespace CodeGenerator
 {
     public class clsBLL
     {
-        public static string DALName { get; set };
+        public static string DALName { get; set; }
         public static string tabs = "        ";
 
         // Helpers Functions:
@@ -96,7 +96,6 @@ namespace CodeGenerator
             }};
         }}";
         }
-
         public static string getByFunc(clsHelper.Column C)
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);
@@ -112,11 +111,13 @@ namespace CodeGenerator
                     string propName = char.ToUpper(col.name.Substring(0, col.name.Length - 2)[0]) + col.name.Substring(0, col.name.Length - 2).Substring(1) + "Details";
                     string cleanName = col.name.Substring(0, col.name.Length - 2);
 
+                    string cleanType = col.type.Replace("?", "");
+
                     compositionPopulation.AppendLine();
                     compositionPopulation.AppendLine($"            // Directly populate nested object using the single Brief method");
                     compositionPopulation.AppendLine($"            if (fullDto.{col.name} != default)");
                     compositionPopulation.AppendLine($"            {{");
-                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{baseEntity}BriefByID(fullDto.{col.name});");
+                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{baseEntity}BriefByID(({cleanType})fullDto.{col.name});");
                     compositionPopulation.AppendLine($"            }}");
                 }
             }
@@ -128,6 +129,7 @@ namespace CodeGenerator
             if (fullDto == null) return null;
 {compositionPopulation}
             return fullDto;
+        
         }}
 ";
         }
@@ -212,9 +214,9 @@ namespace CodeGenerator
             }
 
             return $@"
-        public static Task<int> add{clsHelper.objectName}({clsHelper.className}FullDTO dto)
+        public static async Task<int> add{clsHelper.objectName}({clsHelper.className}FullDTO dto)
         {{{passwordHashingLogic}
-            return {DALName}.add{clsHelper.objectName}(dto);
+            return await {DALName}.add{clsHelper.objectName}(dto);
         }}
 ";
         }
@@ -304,14 +306,16 @@ namespace CodeGenerator
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);
 
-            string functionName = (columnIndex == 0) ? $"getAllBriefByID" : $"getAllBriefBy{C.name}";
-            string dalFunctionName = (columnIndex == 0) ? $"getAllByID" : $"getAllBy{C.name}";
+            string functionName = (columnIndex == 0) ? $"getAllBrief" : $"getAllBriefBy{C.name}";
+            string dalFunctionName = (columnIndex == 0) ? $"getAll" : $"getAllBy{C.name}";
             string existFuncName = (columnIndex == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
+            string BLLparam = (columnIndex == 0) ? "" : $"{C.type} {C.name}";
+            string DALparam = (columnIndex == 0) ? "" : $"{C.name}";
 
             return $@"
-        public static async Task<List<{clsHelper.className}BriefDTO>> {functionName}({C.type} {C.name})
+        public static async Task<List<{clsHelper.className}BriefDTO>> {functionName}({BLLparam})
         {{
-            List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({C.name});
+            List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({DALparam});
             List<{clsHelper.className}BriefDTO> briefList = new List<{clsHelper.className}BriefDTO>();
                 
             foreach ({clsHelper.className}FullDTO item in fullList)
@@ -329,13 +333,16 @@ namespace CodeGenerator
         public static string getAllFullByFunc(clsHelper.Column C)
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);
-            string dalFunctionName = (columnIndex == 0) ? $"getAllByID" : $"getAllBy{C.name}";
-            string functionName = (columnIndex == 0) ? $"getAllFullByID" : $"getAllFullBy{C.name}";
+            string dalFunctionName = (columnIndex == 0) ? $"getAll" : $"getAllBy{C.name}";
+            string functionName = (columnIndex == 0) ? $"getAllFull" : $"getAllFullBy{C.name}";
             string existFuncName = (columnIndex == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
+            string BLLparam = (columnIndex == 0) ? "" : $"{C.type} {C.name}";
+            string DALparam = (columnIndex == 0) ? "" : $"{C.name}";
+
             return $@"
-        public static async Task<List<{clsHelper.className}FullDTO>> {functionName}({C.type} {C.name})
+        public static async Task<List<{clsHelper.className}FullDTO>> {functionName}({BLLparam})
         {{
-            List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({C.name});
+            List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({DALparam});
             return fullList;
         }}
 ";

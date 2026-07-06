@@ -13,7 +13,7 @@ namespace CodeGenerator
     {
         private static string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
         private static string _globalDefaultRole = "Admin";
-
+        private static string prefix = "";
         static async Task Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
@@ -22,7 +22,7 @@ namespace CodeGenerator
                                     .Centered()
                                     .Color(Color.Green));
 
-            AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator v3.0[/]").Justify(Justify.Left));
+            AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator v3.0 (Stable) [/]").Justify(Justify.Left));
             AnsiConsole.MarkupLine("[grey]This tool generates SPs, DAL, BLL, Controllers, and Security For you.[/]");
             AnsiConsole.MarkupLine("[red]Notice:[/] Please ensure database settings are configured in [cyan]clsHelper.connectionString[/].\n");
 
@@ -41,6 +41,8 @@ namespace CodeGenerator
             clsHelper.LoadAvailableRoles();
             AnsiConsole.MarkupLine($"[cyan]Found {databaseTables.Count} tables in the database.[/]\n");
             _globalDefaultRole = clsPresentation.PromptForActionRoles("Global Default CRUD Actions");
+            Console.Write($"Enter The Prefix For all tables classes (Optional, e.g., 'cls' for Classes): ");)
+            prefix = Console.ReadLine();
             foreach (string tName in databaseTables)
             {
                 while (Console.KeyAvailable) Console.ReadKey(true);
@@ -99,13 +101,14 @@ namespace CodeGenerator
 
             Console.Write($"\nEnter The Class Name For {tableName} (cls First will be added on it): ");
             clsHelper.objectName = Console.ReadLine();
-            clsHelper.className = "cls" + clsHelper.objectName;
+
+            clsHelper.className = prefix + clsHelper.objectName;
 
             clsHelper.mappedColumns = clsHelper.mappingTheColumns();
             clsHelper.ColumnsForCsharp = clsHelper.getColumnsForCsharp();
 
             string defaultRole = _globalDefaultRole;
-            clsBLL.DALName = $@"cls{clsHelper.objectName}DAL";
+            clsBLL.DALName = $@"{clsHelper.className}DAL";
             // =========================================================
             // 1. Dictatoric way for User Table (Auto Generate All Actions)
             // =========================================================
