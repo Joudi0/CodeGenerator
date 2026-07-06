@@ -386,11 +386,6 @@ namespace CodeGenerator
                             string deleteRoles = clsPresentation.PromptForActionRoles("Delete");
                             Controller.Append(clsAPIs.deleteAction(C, deleteRoles));
 
-                            clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(C));
-                            DALFuncs.Append(clsDAL.isExistsFunc(C));
-                            BLLFuncs.Append(clsBLL.isExistsFunc(C));
-
-                            Controller.Append(clsAPIs.isExistAction(C, deleteRoles));
                         }
 
                         // Add:

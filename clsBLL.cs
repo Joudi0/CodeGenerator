@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using System.Text;
 using static CodeGenerator.clsHelper;
 
@@ -162,11 +163,17 @@ namespace CodeGenerator
 
                 if (col.name.ToLower().Contains("role")) continue; // Skip role name if it exists
 
+                // Enforce true for the active status on the server side and skip the regular mapping line
+                if (col.name.ToLower().Contains("isactive") || col.name.ToLower() == "active")
+                {
+                    fieldsMapping.AppendLine($"            {col.name} = true,");
+                    continue;
+                }
+
                 fieldsMapping.AppendLine($"            {col.name} = registerDto.{col.name},");
             }
 
-            return $@"
-    public static async Task<int> RegisterUser(Shared.RegisterRequestDTO registerDto)
+            return $@"    public static async Task<int> RegisterUser(Shared.RegisterRequestDTO registerDto)
     {{
         if (registerDto == null || string.IsNullOrEmpty(registerDto.Password))
             throw new ArgumentException(""Password is required for registration."");
@@ -176,8 +183,7 @@ namespace CodeGenerator
 
         var fullDto = new {clsHelper.className}FullDTO
         {{
-{fieldsMapping}
-        }};
+{fieldsMapping}        }};
 
         return await {clsHelper.className}DAL.add{clsHelper.objectName}(fullDto);
     }}";

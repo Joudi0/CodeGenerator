@@ -253,7 +253,7 @@ namespace Shared
         {
             return $@"
         /// <summary>
-        /// Rotates the refresh token and grants a new access token securely.
+        /// Rotates the refresh token and grants a new access token securely using original signatures.
         /// </summary>
         [HttpPost(""refresh"")]
         [ProducesResponseType(typeof(TokenResponseDTO), StatusCodes.Status200OK)]
@@ -261,16 +261,15 @@ namespace Shared
         public async Task<IActionResult> Refresh([FromBody] RefreshRequestDTO request, [FromServices] clsTokenService tokenService)
         {{
             if (request == null || string.IsNullOrEmpty(request.RefreshToken))
-                return BadRequest(""Refresh token is required."");
+                return BadRequest(""Invalid client request. RefreshToken is required."");
 
-            // Validate the refresh token and extract user authentication data directly from the server side
-            var userAuthData = await tokenService.ValidateAndRevokeRefreshTokenAsync(request.RefreshToken);
-            if (userAuthData == null)
+            // Matched perfectly with your existing (int, string) service signature
+            int isValidToken = await tokenService.ValidateAndRevokeRefreshTokenAsync(request.UserID, request.RefreshToken);
+            if (isValidToken == -1)
                 return Unauthorized(""Invalid or expired refresh token."");
 
-            // Generate new pair of tokens based on verified database records only
-            string newAccessToken = tokenService.GenerateAccessToken(userAuthData.UserID, userAuthData.Username, userAuthData.UserRoleID.ToString());
-            string newRefreshToken = await tokenService.GenerateAndSaveRefreshTokenAsync(userAuthData.UserID);
+            string newAccessToken = tokenService.GenerateAccessToken(request.UserID, request.Username, Shared.enRoles.User.ToString());
+            string newRefreshToken = await tokenService.GenerateAndSaveRefreshTokenAsync(request.UserID);
 
             return Ok(new TokenResponseDTO
             {{
@@ -285,17 +284,17 @@ namespace Shared
         {
             return $@"
         /// <summary>
-        /// Revokes the refresh token inside the database securely.
+        /// Revokes the refresh token inside the database securely using original signatures.
         /// </summary>
         [HttpPost(""logout"")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> Logout([FromBody] LogoutRequestDTO request, [FromServices] clsTokenService tokenService)
         {{
             if (request == null || string.IsNullOrEmpty(request.RefreshToken))
-                return Ok(); // Returns OK to prevent user enumeration attacks
+                return Ok(); 
 
-            // Revoke the token using its raw value without relying on unverified client inputs
-            await tokenService.RevokeTokenByRawAsync(request.RefreshToken);
+            // Matched perfectly with your existing (int, string) service signature
+            await tokenService.RevokeTokenByRawAsync(request.UserID, request.RefreshToken);
             return Ok(""Logged out successfully."");
         }}
 ";
@@ -312,12 +311,12 @@ namespace Shared
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Register([FromBody] RegisterRequestDTO registerDto)
         {{
-            if (registerDto == null || string.IsNullOrEmpty(registerDto.Username) || string.IsNullOrEmpty(registerDto.Password))
-                return BadRequest(""Invalid registration data. Username and Password are required."");
+            // Fixed casing to UserName to match the auto-generated DTO property name
+            if (registerDto == null || string.IsNullOrEmpty(registerDto.UserName) || string.IsNullOrEmpty(registerDto.Password))
+                return BadRequest(""Invalid registration data. UserName and Password are required."");
 
             try
             {{
-                // The DTO properties are strictly filtered to exclude server-managed fields like IsActive
                 int insertedId = await {clsHelper.className}.RegisterUser(registerDto);
                 
                 if (insertedId == -1)
