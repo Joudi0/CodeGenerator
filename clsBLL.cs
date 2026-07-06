@@ -7,7 +7,7 @@ namespace CodeGenerator
 {
     public class clsBLL
     {
-        public static string DALName = $@"cls{clsHelper.objectName}DAL";
+        public static string DALName { get; set };
         public static string tabs = "        ";
 
         // Helpers Functions:

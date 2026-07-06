@@ -104,9 +104,8 @@ namespace CodeGenerator
             clsHelper.mappedColumns = clsHelper.mappingTheColumns();
             clsHelper.ColumnsForCsharp = clsHelper.getColumnsForCsharp();
 
-            // FIX: اعتماد الأدوار الافتراضية المحددة من أول تشغيلة للبرنامج مية بالمية
             string defaultRole = _globalDefaultRole;
-
+            clsBLL.DALName = $@"cls{clsHelper.objectName}DAL";
             // =========================================================
             // 1. Dictatoric way for User Table (Auto Generate All Actions)
             // =========================================================
