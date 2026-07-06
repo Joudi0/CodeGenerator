@@ -311,21 +311,17 @@ namespace CodeGenerator
             return $@"
         public static async Task<List<{clsHelper.className}BriefDTO>> {functionName}({C.type} {C.name})
         {{
-            if (await {existFuncName}({C.name}))
-            {{
-                List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({C.name});
-                List<{clsHelper.className}BriefDTO> briefList = new List<{clsHelper.className}BriefDTO>();
+            List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({C.name});
+            List<{clsHelper.className}BriefDTO> briefList = new List<{clsHelper.className}BriefDTO>();
                 
-                foreach ({clsHelper.className}FullDTO item in fullList)
+            foreach ({clsHelper.className}FullDTO item in fullList)
+            {{
+                briefList.Add(new {clsHelper.className}BriefDTO
                 {{
-                    briefList.Add(new {clsHelper.className}BriefDTO
-                    {{
 {generateBriefMapping("item.")}
-                    }});
-                }}
-                return briefList;
+                }});
             }}
-            return new List<{clsHelper.className}BriefDTO>();
+            return briefList;
         }}
 ";
         }
@@ -339,12 +335,8 @@ namespace CodeGenerator
             return $@"
         public static async Task<List<{clsHelper.className}FullDTO>> {functionName}({C.type} {C.name})
         {{
-            if (await {existFuncName}({C.name}))
-            {{
-                List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({C.name});
-                return fullList;
-            }}
-            return new List<{clsHelper.className}FullDTO>();
+            List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({C.name});
+            return fullList;
         }}
 ";
         }
