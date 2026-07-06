@@ -42,7 +42,7 @@ namespace CodeGenerator
             AnsiConsole.MarkupLine($"[cyan]Found {databaseTables.Count} tables in the database.[/]\n");
             _globalDefaultRole = clsPresentation.PromptForActionRoles("Global Default CRUD Actions");
             Console.Write($"Enter The Prefix For all tables classes (Optional, e.g., 'cls' for Classes): ");
-            prefix = Console.ReadLine();
+            prefix = Console.ReadLine(); // Enter cls always, working on it to be optional in the future
             foreach (string tName in databaseTables)
             {
                 while (Console.KeyAvailable) Console.ReadKey(true);
@@ -385,6 +385,12 @@ namespace CodeGenerator
 
                             string deleteRoles = clsPresentation.PromptForActionRoles("Delete");
                             Controller.Append(clsAPIs.deleteAction(C, deleteRoles));
+
+                            clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(C));
+                            DALFuncs.Append(clsDAL.isExistsFunc(C));
+                            BLLFuncs.Append(clsBLL.isExistsFunc(C));
+
+                            Controller.Append(clsAPIs.isExistAction(C, deleteRoles));
                         }
 
                         // Add:

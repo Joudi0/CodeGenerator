@@ -340,6 +340,7 @@ using System.Text;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using Scalar.AspNetCore;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -423,7 +424,8 @@ builder.Services.AddControllers();
 WebApplication app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi(); 
+    app.MapOpenApi();
+    app.MapScalarApiReference(); // New API Reference for .NET 10
 }
 
 app.UseHttpsRedirection();
@@ -514,8 +516,10 @@ namespace Shared
             RunDotNetCommand(webApiFolder, "add package Microsoft.AspNetCore.Authentication.JwtBearer");
             RunDotNetCommand(dalFolder, "add package Microsoft.Data.SqlClient");
             RunDotNetCommand(webApiFolder, "add package Microsoft.Data.SqlClient");
-            RunDotNetCommand(webApiFolder, "add package Microsoft.OpenApi");
             RunDotNetCommand(webApiFolder, "setProperty OpenApiGenerateDocuments false");
+            // for broken old .net file:
+            RunDotNetCommand(webApiFolder, "add package Scalar.AspNetCore");
+            RunDotNetCommand(webApiFolder, "setProperty NoWarn NU1903");
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)
