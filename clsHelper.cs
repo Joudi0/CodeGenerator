@@ -421,6 +421,8 @@ foreach (System.Type handler in handlerTypes)
 
 builder.Services.AddControllers(); 
 
+builder.Services.AddScoped<WebAPI.Services.clsTokenService>(); // to make the tokens in login works
+
 WebApplication app = builder.Build();
 if (app.Environment.IsDevelopment())
 {

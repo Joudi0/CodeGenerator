@@ -140,7 +140,6 @@ namespace CodeGenerator
                 clsHelper.Column usernameColumn = clsHelper.Columns.Find(c => c.name.ToLower().Contains("username"));
                 clsHelper.Column usernameColumnCsharp = clsHelper.ColumnsForCsharp.Find(c => c.name == usernameColumn.name);
 
-                // FIX: البحث في لستة الكاش لـ ColumnsForCsharp منعاً لتسلل الـ nvarchar للـ Fallback
                 if (usernameColumnCsharp.name == null)
                 {
                     usernameColumnCsharp = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("user")
