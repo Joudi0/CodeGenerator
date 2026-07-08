@@ -30,7 +30,7 @@ namespace CodeGenerator
 
                     // 2. Dynamically construct and append the clean Nested Brief DTO property
                     string baseEntity = clsHelper.GetCleanClassName(col.name);
-                    string dtoType = "cls" + baseEntity + "BriefDTO";
+                    string dtoType = clsHelper.Prefix + baseEntity + "BriefDTO";
                     string propName = char.ToUpper(col.name.Substring(0, col.name.Length - 2)[0]) + col.name.Substring(0, col.name.Length - 2).Substring(1) + "Details";
 
                     Properties += $"{tabs}public {dtoType} {propName} {{ get; set; }}\n";
@@ -366,7 +366,7 @@ namespace Shared
         [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> {actionName}({C.type} {paramName}{serviceInjection})
-        {{{ownershipCheck}            {clsHelper.className}FullDTO result = await cls{clsHelper.objectName}.{bllMethodName}({paramName});
+        {{{ownershipCheck}            {clsHelper.className}FullDTO result = await {clsHelper.className}.{bllMethodName}({paramName});
             if (result == null) return NotFound($""{clsHelper.objectName} with {C.name} {{{paramName}}} not found."");
             return Ok(result);
         }}
@@ -405,7 +405,7 @@ namespace Shared
         public async Task<IActionResult> Update([FromBody] {clsHelper.className}FullDTO dto{serviceInjection})
         {{
             if (dto == null) return BadRequest(""Invalid data payload."");{ownershipCheck}
-            bool isUpdated = await cls{clsHelper.objectName}.update{clsHelper.objectName}(dto);
+            bool isUpdated = await {clsHelper.className}.update{clsHelper.objectName}(dto);
             if (!isUpdated) return NotFound($""{clsHelper.objectName} update failed or record not found."");
             return Ok(""Updated successfully."");
         }}
@@ -435,7 +435,7 @@ namespace Shared
         public async Task<IActionResult> Add([FromBody] {clsHelper.className}FullDTO dto)
         {{
             if (dto == null) return BadRequest(""Invalid data payload."");
-            int insertedID = await cls{clsHelper.objectName}.add{clsHelper.objectName}(dto);
+            int insertedID = await {clsHelper.className}.add{clsHelper.objectName}(dto);
             if (insertedID == -1) return StatusCode(500, ""An error occurred while adding the record."");
             return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, dto);
         }}
@@ -472,7 +472,7 @@ namespace Shared
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Delete({C.type} {C.name}{serviceInjection})
         {{
-{ownershipCheck}            bool isDeleted = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
+{ownershipCheck}            bool isDeleted = await {clsHelper.className}.{bllMethodName}({C.name});
             if (!isDeleted) return NotFound($""{clsHelper.objectName} not found or couldn't be deleted."");
             return Ok(""Deleted successfully."");
         }}
@@ -519,7 +519,7 @@ namespace Shared
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({C.type} {C.name}{serviceInjection})
         {{{ownershipCheck}      
-            bool exists = await cls{clsHelper.objectName}.{bllMethodName}({C.name});
+            bool exists = await {clsHelper.className}.{bllMethodName}({C.name});
             return Ok(exists);
         }}
 ";
@@ -545,7 +545,7 @@ namespace Shared
         [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetPage([FromQuery] int rowsPerPage = 10, [FromQuery] int pageNumber = 1, [FromQuery] string sortColumn = ""{clsHelper.Columns[0].name}"", [FromQuery] string direction = ""ASC"")
         {{
-            List<{clsHelper.className}BriefDTO> list = await cls{clsHelper.objectName}.Paging(rowsPerPage, pageNumber, sortColumn, direction);
+            List<{clsHelper.className}BriefDTO> list = await {clsHelper.className}.Paging(rowsPerPage, pageNumber, sortColumn, direction);
             return Ok(list);
         }}
 ";
@@ -579,7 +579,7 @@ namespace Shared
         [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({BLLparam})
         {{
-            List<{clsHelper.className}BriefDTO> list = await cls{clsHelper.objectName}.{bllMethodName}({bllCallParam});
+            List<{clsHelper.className}BriefDTO> list = await {clsHelper.className}.{bllMethodName}({bllCallParam});
             return Ok(list);
         }}
 ";
@@ -613,7 +613,7 @@ namespace Shared
         [ProducesResponseType(typeof(List<{clsHelper.className}FullDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({BLLparam})
         {{
-            List<{clsHelper.className}FullDTO> list = await cls{clsHelper.objectName}.{bllMethodName}({bllCallParam});
+            List<{clsHelper.className}FullDTO> list = await {clsHelper.className}.{bllMethodName}({bllCallParam});
             return Ok(list);
         }}
 ";

@@ -108,10 +108,9 @@ namespace CodeGenerator
                 if (col.composition)
                 {
                     string baseEntity = GetCleanClassName(col.name);
-                    string targetBLL = "cls" + baseEntity;
-                    string propName = char.ToUpper(col.name.Substring(0, col.name.Length - 2)[0]) + col.name.Substring(0, col.name.Length - 2).Substring(1) + "Details";
-                    string cleanName = col.name.Substring(0, col.name.Length - 2);
-
+                    string targetBLL = clsHelper.Prefix + baseEntity;
+                    string cleanProp = col.name.Substring(0, col.name.Length - 2);
+                    string propName = char.ToUpper(cleanProp[0]) + cleanProp.Substring(1) + "Details";
                     string cleanType = col.type.Replace("?", "");
 
                     compositionPopulation.AppendLine();
@@ -364,7 +363,7 @@ using System.Threading.Tasks;
 
 namespace BLL
 {{
-    public class cls{clsHelper.objectName}
+    public class {clsHelper.className}
     {{
 {injectedString}
     }}

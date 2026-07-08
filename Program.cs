@@ -99,9 +99,7 @@ namespace CodeGenerator
 
             isUserTable = (tableName.ToLower() == "user" || tableName.ToLower() == "users");
 
-            Console.Write($"\nEnter The Class Name For {tableName} (cls First will be added on it): ");
-            clsHelper.objectName = Console.ReadLine();
-
+            clsHelper.objectName = clsHelper.GetSingularEntityName(tableName);
             clsHelper.className = prefix + clsHelper.objectName;
 
             clsHelper.mappedColumns = clsHelper.mappingTheColumns();

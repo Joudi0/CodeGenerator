@@ -291,7 +291,7 @@ namespace CodeGenerator
             if (Columns.Count == 0) return "Error in the lists";
 
             string Function = $@"
-        public static async Task<List<cls{objectName}FullDTO>> {FunctionName}({C.type} {C.name})
+        public static async Task<List<{clsHelper.className}FullDTO>> {FunctionName}({C.type} {C.name})
         {{
             List<{clsHelper.className}FullDTO> list = new List<{clsHelper.className}FullDTO>();
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);

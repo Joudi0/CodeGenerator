@@ -22,12 +22,14 @@ namespace CodeGenerator
             public bool composition;
             public int? length; // Optional
         };
-        public static string objectName = "";
-        public static string className = "";
-        public static List<Column> Columns;
-        public static List<Column> mappedColumns;
-        public static List<Column> ColumnsForCsharp;
-        public static List<string> AvailableRoles = new List<string>();
+        public static string objectName { get; set; }
+        public static string className { get; set; }
+        public static List<Column> Columns { get; set; }
+        public static List<Column> mappedColumns { get; set; }
+        public static List<Column> ColumnsForCsharp { get; set; }
+        public static List<string> allEntities { get; set; }
+        public static List<string> AvailableRoles { get; set; }
+        public static string Prefix { get; set; }
 
         // The global dopamine counter!
         public static int TotalLinesGenerated = 0;
@@ -80,6 +82,31 @@ namespace CodeGenerator
                 throw;
             }
             return columnsList;
+        }
+
+        public static string GetSingularEntityName(string tableName)
+        {
+            var irregularPlurals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "People", "Person" },
+                { "Countries", "Country" }
+            };
+
+            if (irregularPlurals.TryGetValue(tableName, out string singular))
+            {
+                return singular;
+            }
+
+            if (tableName.EndsWith("ies", StringComparison.OrdinalIgnoreCase))
+            {
+                return tableName.Substring(0, tableName.Length - 3) + "y";
+            }
+            if (tableName.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+            {
+                return tableName.Substring(0, tableName.Length - 1);
+            }
+
+            return tableName; 
         }
 
         public static void LoadAvailableRoles()
@@ -590,18 +617,22 @@ namespace Shared
 
         public static string GetCleanClassName(string columnName)
         {
-            string lower = columnName.ToLower();
-            if (lower.Contains("user")) return "User";
-            if (lower.Contains("person")) return "Person";
-            if (lower.Contains("application")) return "Application";
-            if (lower.Contains("license")) return "License";
-            if (lower.Contains("country")) return "Country";
+            string lowerColumn = columnName.ToLower();
+
+            string matchedEntity = clsHelper.allEntities
+                .FirstOrDefault(entity => lowerColumn.Contains(entity.ToLower()));
+
+            if (matchedEntity != null)
+            {
+                return char.ToUpper(matchedEntity[0]) + matchedEntity.Substring(1);
+            }
+
             string clean = columnName.EndsWith("ID", StringComparison.OrdinalIgnoreCase)
                 ? columnName.Substring(0, columnName.Length - 2)
                 : columnName;
+
             return char.ToUpper(clean[0]) + clean.Substring(1);
         }
-
         public static List<string> GetAllTables()
         {
             List<string> tableNames = new List<string>();
@@ -617,7 +648,16 @@ namespace Shared
                     {
                         while (reader.Read())
                         {
-                            tableNames.Add(reader["TABLE_NAME"].ToString());
+                            string tableName = reader["TABLE_NAME"].ToString();
+                            tableNames.Add(tableName);
+
+                            // هون الملعوب: بنطلع اسم الـ Entity المفرد والنضيف وبنحفظه باللستة المركزية
+                            string entityName = GetSingularEntityName(tableName);
+
+                            if (!clsHelper.allEntities.Contains(entityName))
+                            {
+                                clsHelper.allEntities.Add(entityName);
+                            }
                         }
                     }
                 }
