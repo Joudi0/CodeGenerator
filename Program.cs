@@ -14,6 +14,7 @@ namespace CodeGenerator
         private static string _projectDirectory = ConfigurationManager.AppSettings["projectDirectory"];
         private static string _globalDefaultRole = "Admin";
         private static string prefix = "";
+
         static async Task Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
@@ -42,7 +43,8 @@ namespace CodeGenerator
             AnsiConsole.MarkupLine($"[cyan]Found {databaseTables.Count} tables in the database.[/]\n");
             _globalDefaultRole = clsPresentation.PromptForActionRoles("Global Default CRUD Actions");
             Console.Write($"Enter The Prefix For all tables classes (Optional, e.g., 'cls' for Classes): ");
-            prefix = Console.ReadLine(); // Enter cls always, working on it to be optional in the future
+            prefix = Console.ReadLine();
+
             foreach (string tName in databaseTables)
             {
                 while (Console.KeyAvailable) Console.ReadKey(true);
@@ -50,12 +52,13 @@ namespace CodeGenerator
                 if (AnsiConsole.Confirm($"Do you want to generate code for table [green]{tName}[/]?"))
                 {
                     await Run(tName);
-                    Console.Clear(); 
+                    Console.Clear();
                     AnsiConsole.Write(new FigletText("ADO Gen Code").Centered().Color(Color.Green));
                     AnsiConsole.WriteLine();
                     AnsiConsole.WriteLine();
                 }
             }
+
             // Finished generating code for all tables
             AnsiConsole.WriteLine();
 
@@ -107,6 +110,7 @@ namespace CodeGenerator
 
             string defaultRole = _globalDefaultRole;
             clsBLL.DALName = $@"{clsHelper.className}DAL";
+
             // =========================================================
             // 1. Dictatoric way for User Table (Auto Generate All Actions)
             // =========================================================
@@ -338,7 +342,7 @@ namespace CodeGenerator
                     }
                     else
                     {
-                        // Fallback to the fully manual democratic way (Original detailed prompts)
+                        // Fallback to the fully manual democratic way
                         AnsiConsole.MarkupLine("[blue]-> Falling back to manual customizable setup...[/]");
                         string answer = "yes";
                         Console.Write("\nFor DAL, BLL, And Stored Procedures:\n");
@@ -382,7 +386,6 @@ namespace CodeGenerator
 
                             string deleteRoles = clsPresentation.PromptForActionRoles("Delete");
                             Controller.Append(clsAPIs.deleteAction(C, deleteRoles));
-
                         }
 
                         // Add:
@@ -485,15 +488,17 @@ namespace CodeGenerator
                 string dal = Path.Combine(_projectDirectory, "DAL");
                 string bll = Path.Combine(_projectDirectory, "BLL");
                 string dto = Path.Combine(_projectDirectory, "Shared", "DTOs");
-                string briefDto = Path.Combine(dto, "Brief");
-                string fullDto = Path.Combine(dto, "Full");
+
+                // NEW: Better Structural Organization for the 4 DTOs
+                string inputsDto = Path.Combine(dto, "Inputs");
+                string outputsDto = Path.Combine(dto, "Outputs");
                 string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
 
                 if (!Directory.Exists(dal)) Directory.CreateDirectory(dal);
                 if (!Directory.Exists(bll)) Directory.CreateDirectory(bll);
                 if (!Directory.Exists(dto)) Directory.CreateDirectory(dto);
-                if (!Directory.Exists(briefDto)) Directory.CreateDirectory(briefDto);
-                if (!Directory.Exists(fullDto)) Directory.CreateDirectory(fullDto);
+                if (!Directory.Exists(inputsDto)) Directory.CreateDirectory(inputsDto);
+                if (!Directory.Exists(outputsDto)) Directory.CreateDirectory(outputsDto);
 
                 if (isUserTable)
                 {
@@ -505,9 +510,12 @@ namespace CodeGenerator
                 // Exact file paths
                 string dalPath = Path.Combine(dal, $"{clsHelper.className}DAL.cs");
                 string bllPath = Path.Combine(bll, $"{clsHelper.className}.cs");
-                string BriefDTOPath = Path.Combine(briefDto, $"{clsHelper.className}BriefDTO.cs");
-                string FullDTOPath = Path.Combine(fullDto, $"{clsHelper.className}FullDTO.cs");
                 string controllerPath = Path.Combine(controllersFolder, $"{clsHelper.objectName}Controller.cs");
+
+                string briefInputDTOPath = Path.Combine(inputsDto, $"{clsHelper.className}BriefInputDTO.cs");
+                string fullInputDTOPath = Path.Combine(inputsDto, $"{clsHelper.className}FullInputDTO.cs");
+                string briefOutputDTOPath = Path.Combine(outputsDto, $"{clsHelper.className}BriefOutputDTO.cs");
+                string fullOutputDTOPath = Path.Combine(outputsDto, $"{clsHelper.className}FullOutputDTO.cs");
 
                 // Save files
                 Console.Write("-> Making Stored Procedures... ");
@@ -532,21 +540,21 @@ namespace CodeGenerator
                 TrackLines(bllCode); // Catch and count!
                 Console.WriteLine("[Done]");
 
-                Console.Write("-> Making DTO Class... ");
-                string BriefDTOCode = clsAPIs.BriefDTO();
-                using (StreamWriter writer = new StreamWriter(BriefDTOPath))
-                {
-                    await writer.WriteAsync(BriefDTOCode);
-                }
+                Console.Write("-> Making 4 DTO Classes (Inputs/Outputs)... ");
+                string briefInputCode = clsAPIs.BriefInputDTO();
+                string fullInputCode = clsAPIs.FullInputDTO();
+                string briefOutputCode = clsAPIs.BriefOutputDTO();
+                string fullOutputCode = clsAPIs.FullOutputDTO();
 
-                string FullDTOCode = clsAPIs.FullDTO();
-                using (StreamWriter writer = new StreamWriter(FullDTOPath))
-                {
-                    await writer.WriteAsync(FullDTOCode);
-                }
+                using (StreamWriter writer = new StreamWriter(briefInputDTOPath)) await writer.WriteAsync(briefInputCode);
+                using (StreamWriter writer = new StreamWriter(fullInputDTOPath)) await writer.WriteAsync(fullInputCode);
+                using (StreamWriter writer = new StreamWriter(briefOutputDTOPath)) await writer.WriteAsync(briefOutputCode);
+                using (StreamWriter writer = new StreamWriter(fullOutputDTOPath)) await writer.WriteAsync(fullOutputCode);
 
-                TrackLines(BriefDTOCode); // Catch and count!
-                TrackLines(FullDTOCode); // Catch and count!
+                TrackLines(briefInputCode);
+                TrackLines(fullInputCode);
+                TrackLines(briefOutputCode);
+                TrackLines(fullOutputCode);
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making Web API Controller... ");
@@ -556,8 +564,9 @@ namespace CodeGenerator
                     await writer.WriteAsync(controllerCode);
                 }
                 TrackLines(controllerCode); // Catch and count!
-                clsHelper.TrackClass(3);
-                clsHelper.TrackDTO(2);
+
+                clsHelper.TrackClass(3); // DAL, BLL, Controller
+                clsHelper.TrackDTO(4);   // Tracking the 4 new DTOs
                 Console.WriteLine("[Done]");
             }
             catch (Exception ex)

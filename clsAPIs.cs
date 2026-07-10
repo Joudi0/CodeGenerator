@@ -10,115 +10,140 @@ namespace CodeGenerator
     {
         public static string tabs = "        ";
 
-        public static string writeProperties(bool full = false)
+        public static string writeProperties(bool isFull, bool isOutput)
         {
             List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.mappedColumns);
             string Properties = "";
 
-            // Apply blacklist filter only if it's a Brief DTO
-            if (!full)
+            // 1. Apply blacklist filter only if it's a Brief DTO (Input or Output)
+            if (!isFull)
             {
                 columns.RemoveAll((clsHelper.Column c) => blackList.Contains(c.name.ToLower()));
+
+                // Anti-Tampering: For Brief INPUT, automatically strip out system-controlled fields
+                if (!isOutput)
+                {
+                    columns.RemoveAll((clsHelper.Column c) =>
+                        c.name.ToLower().Contains("isactive") ||
+                        c.name.ToLower() == "active" ||
+                        c.name.ToLower().Contains("ispremium") ||
+                        c.name.ToLower() == "premium" ||
+                        c.name.ToLower().Contains("roleid") ||
+                        c.name.ToLower().Contains("role")
+                    );
+                }
             }
 
             foreach (clsHelper.Column col in columns)
             {
-                if (col.composition)
-                {
-                    // 1. Keep the primitive ID for database and DAL operations
-                    Properties += $"{tabs}public {col.type} {col.name} {{ get; set; }}\n";
+                // Always render the primitive database column property
+                Properties += $"{tabs}public {col.type} {col.name} {{ get; set; }}\n";
 
-                    // 2. Dynamically construct and append the clean Nested Brief DTO property
+                // 2. Render Composition (Nested DTOs) ONLY for Output DTOs to keep Inputs purely Flat
+                if (isOutput && col.composition)
+                {
                     string baseEntity = clsHelper.GetCleanClassName(col.name);
-                    string dtoType = clsHelper.Prefix + baseEntity + "BriefDTO";
+
+                    // Nested details dynamically follow the fullness context of the current output DTO
+                    string suffix = isFull ? "FullOutputDTO" : "BriefOutputDTO";
+                    string dtoType = clsHelper.Prefix + baseEntity + suffix;
                     string propName = char.ToUpper(col.name.Substring(0, col.name.Length - 2)[0]) + col.name.Substring(0, col.name.Length - 2).Substring(1) + "Details";
 
                     Properties += $"{tabs}public {dtoType} {propName} {{ get; set; }}\n";
-                }
-                else
-                {
-                    // Normal database column mapping
-                    Properties += $"{tabs}public {col.type} {col.name} {{ get; set; }}\n";
                 }
             }
             return Properties;
         }
 
         public static List<string> blackList = new List<string>
-{ 
-    // Authentication & Cryptography
-    "password", "pass", "pwd", "passwd",
-    "passwordhash", "password_hash", "passwordsalt", "password_salt",
-    "secret", "privatekey", "private_key", "publickey", "public_key",
-    "key", "iv", "apikey", "api_key",
-    "token", "authtoken", "auth_token", "refreshtoken", "refresh_token",
-    "sessionid", "session_id", "pin", "pincode",
+        { 
+            // Authentication & Cryptography
+            "password", "pass", "pwd", "passwd",
+            "passwordhash", "password_hash", "passwordsalt", "password_salt",
+            "secret", "privatekey", "private_key", "publickey", "public_key",
+            "key", "iv", "apikey", "api_key",
+            "token", "authtoken", "auth_token", "refreshtoken", "refresh_token",
+            "sessionid", "session_id", "pin", "pincode",
 
-    // Financial & Sensitive Data
-    "salary", "balance", "income", "revenue",
-    "creditcard", "credit_card", "cvv", "cvc",
-    "cardnumber", "card_number", "bankaccount", "bank_account",
+            // Financial & Sensitive Data
+            "salary", "balance", "income", "revenue",
+            "creditcard", "credit_card", "cvv", "cvc",
+            "cardnumber", "card_number", "bankaccount", "bank_account",
 
-    // Infrastructure & Device Info
-    "ip", "ipaddress", "ip_address", "mac", "macaddress", "mac_address",
+            // Infrastructure & Device Info
+            "ip", "ipaddress", "ip_address", "mac", "macaddress", "mac_address",
 
-    // Personal Identifiers
-    "ssn", "nationalid", "national_id", "passport", "passportnumber", "passport_number"
-};
-        public static string BriefDTO()
-        {
-            string DTO = $@"
-using System;
-using System.Data;
-using System.Threading.Tasks;
-namespace Shared
-{{
-    public class {clsHelper.className}BriefDTO
-    {{
-        {writeProperties()}
-    }}
-}}
-";
-            return DTO;
-        }
+            // Personal Identifiers
+            "ssn", "nationalid", "national_id", "passport", "passportnumber", "passport_number"
+        };
 
-        public static string FullDTO()
+        public static string BriefInputDTO()
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
             string extraProperties = "";
 
-            // Password property is only included in the Full DTO for user tables to facilitate registration and updates
-            if (isUser)
+            if (isUser && !clsHelper.ColumnsForCsharp.Any(c => c.name.ToLower() == "password"))
             {
-                // Check if 'Password' already exists in the columns to avoid duplication!
-                bool hasPassword = clsHelper.ColumnsForCsharp.Any(c => c.name.ToLower() == "password");
-
-                // Password property is only included in the Full DTO for user tables if it's not already there
-                if (isUser && !hasPassword)
-                {
-                    extraProperties = "        public string Password { get; set; }\n";
-                }
+                extraProperties = $"{tabs}public string Password {{ get; set; }}\n";
             }
 
-            string DTO = $@"
-using System;
-using System.Data;
-using System.Threading.Tasks;
+            return $@"using System;
+
 namespace Shared
 {{
-    public class {clsHelper.className}FullDTO
+    public class {clsHelper.className}BriefInputDTO
     {{
-        {writeProperties(true)}{extraProperties}
-    }}
-}}
-";
-            return DTO;
+{writeProperties(isFull: false, isOutput: false)}{extraProperties}    }}
+}}";
+        }
+
+        public static string FullInputDTO()
+        {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string extraProperties = "";
+
+            if (isUser && !clsHelper.ColumnsForCsharp.Any(c => c.name.ToLower() == "password"))
+            {
+                extraProperties = $"{tabs}public string Password {{ get; set; }}\n";
+            }
+
+            return $@"using System;
+
+namespace Shared
+{{
+    public class {clsHelper.className}FullInputDTO
+    {{
+{writeProperties(isFull: true, isOutput: false)}{extraProperties}    }}
+}}";
+        }
+
+        public static string BriefOutputDTO()
+        {
+            return $@"using System;
+
+namespace Shared
+{{
+    public class {clsHelper.className}BriefOutputDTO
+    {{
+{writeProperties(isFull: false, isOutput: true)}    }}
+}}";
+        }
+
+        public static string FullOutputDTO()
+        {
+            return $@"using System;
+
+namespace Shared
+{{
+    public class {clsHelper.className}FullOutputDTO
+    {{
+{writeProperties(isFull: true, isOutput: true)}    }}
+}}";
         }
 
         public static string SecurityDTO()
         {
-            string DTO = $@"
-using System;
+            return $@"using System;
 
 namespace Shared
 {{
@@ -129,51 +154,12 @@ namespace Shared
         public string PasswordSalt {{ get; set; }}
         public enRoles UserRoleID {{ get; set; }}
     }}
-}}
-";
-            return DTO;
-        }
-
-        public static string RegisterRequestDTO()
-        {
-            StringBuilder dtoProperties = new StringBuilder();
-            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.ColumnsForCsharp);
-
-            // Remove the first column (ID) since it is auto-generated and not provided during registration
-            columns.RemoveAt(0);
-
-            foreach (var col in columns)
-            {
-                // Skip cryptographic fields as they are generated on the server side, not sent by the client
-                if (col.name.ToLower().Contains("hash") || col.name.ToLower().Contains("salt") || col.name.ToLower() == "password")
-                    continue;
-
-                // Skip the role column to prevent Mass Assignment vulnerability
-                if (col.name.ToLower().Contains("roleid") || col.name.ToLower().Contains("role"))
-                    continue;
-
-                // NEW: Skip active status column to prevent client tampering
-                if (col.name.ToLower().Contains("isactive") || col.name.ToLower() == "active")
-                    continue;
-
-                dtoProperties.AppendLine($"        public {col.type} {col.name} {{ get; set; }}");
-            }
-
-            // Explicitly add the plain-text password property required to receive user credentials
-            dtoProperties.AppendLine("        public string Password { get; set; }");
-
-            return $@"using System;
-
-namespace Shared{{
-    public class RegisterRequestDTO
-    {{
-{dtoProperties}    }}
 }}";
         }
 
         public static string TokenResponseDTO()
         {
-            string DTO = $@"using System;
+            return $@"using System;
 
 namespace Shared
 {{
@@ -183,12 +169,11 @@ namespace Shared
         public string RefreshToken {{ get; set; }}
     }}
 }}";
-            return DTO;
         }
 
         public static string RefreshRequestDTO()
         {
-            string DTO = $@"using System;
+            return $@"using System;
 
 namespace Shared
 {{
@@ -199,12 +184,11 @@ namespace Shared
         public string RefreshToken {{ get; set; }}
     }}
 }}";
-            return DTO;
         }
 
         public static string LogoutRequestDTO()
         {
-            string DTO = $@"using System;
+            return $@"using System;
 
 namespace Shared
 {{
@@ -214,10 +198,42 @@ namespace Shared
         public string RefreshToken {{ get; set; }}
     }}
 }}";
-            return DTO;
         }
+        public static string RegisterRequestDTO()
+        {
+            StringBuilder dtoProperties = new StringBuilder();
+            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.ColumnsForCsharp);
+
+            if (columns.Count > 0) columns.RemoveAt(0); // Remove ID
+
+            foreach (var col in columns)
+            {
+                if (col.name.ToLower().Contains("hash") || col.name.ToLower().Contains("salt") || col.name.ToLower() == "password")
+                    continue;
+
+                if (col.name.ToLower().Contains("roleid") || col.name.ToLower().Contains("role"))
+                    continue;
+
+                if (col.name.ToLower().Contains("isactive") || col.name.ToLower() == "active")
+                    continue;
+
+                dtoProperties.AppendLine($"{tabs}public {col.type} {col.name} {{ get; set; }}");
+            }
+
+            dtoProperties.AppendLine($"{tabs}public string Password {{ get; set; }}");
+
+            return $@"using System;
+
+namespace Shared
+{{
+    public class RegisterRequestDTO
+    {{
+{dtoProperties}    }}
+}}";
+        }
+
         // ==========================================
-        //  Web API Controllers
+        //  Web API Controllers Actions
         // ==========================================
         public static string loginAction()
         {
@@ -263,7 +279,6 @@ namespace Shared
             if (request == null || string.IsNullOrEmpty(request.RefreshToken))
                 return BadRequest(""Invalid client request. RefreshToken is required."");
 
-            // Matched perfectly with your existing (int, string) service signature
             int isValidToken = await tokenService.ValidateAndRevokeRefreshTokenAsync(request.UserID, request.RefreshToken);
             if (isValidToken == -1)
                 return Unauthorized(""Invalid or expired refresh token."");
@@ -293,7 +308,6 @@ namespace Shared
             if (request == null || string.IsNullOrEmpty(request.RefreshToken))
                 return Ok(); 
 
-            // Matched perfectly with your existing (int, string) service signature
             await tokenService.RevokeTokenByRawAsync(request.UserID, request.RefreshToken);
             return Ok(""Logged out successfully."");
         }}
@@ -309,9 +323,8 @@ namespace Shared
         [HttpPost(""register"")]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> Register([FromBody] RegisterRequestDTO registerDto)
+        public async Task<IActionResult> Register([FromBody] Shared.RegisterRequestDTO registerDto)
         {{
-            // Fixed casing to UserName to match the auto-generated DTO property name
             if (registerDto == null || string.IsNullOrEmpty(registerDto.UserName) || string.IsNullOrEmpty(registerDto.Password))
                 return BadRequest(""Invalid registration data. UserName and Password are required."");
 
@@ -358,15 +371,15 @@ namespace Shared
 
             return $@"
         /// <summary>
-        /// Retrieves a record by its {C.name}.
+        /// Retrieves a record by its {C.name} wrapping it in a comprehensive FullOutputDTO containing nested entities.
         /// </summary>
         {authAttribute}
         [HttpGet(""{route}"")]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
-        [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof({clsHelper.className}FullOutputDTO), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> {actionName}({C.type} {paramName}{serviceInjection})
-        {{{ownershipCheck}            {clsHelper.className}FullDTO result = await {clsHelper.className}.{bllMethodName}({paramName});
+        {{{ownershipCheck}            {clsHelper.className}FullOutputDTO result = await {clsHelper.className}.{bllMethodName}({paramName});
             if (result == null) return NotFound($""{clsHelper.objectName} with {C.name} {{{paramName}}} not found."");
             return Ok(result);
         }}
@@ -394,7 +407,7 @@ namespace Shared
 
             return $@"
         /// <summary>
-        /// Updates an existing record in the database.
+        /// Updates an existing record in the database accepting a clean, flat BriefInputDTO.
         /// </summary>
         {authAttribute}
         [HttpPut]
@@ -402,7 +415,7 @@ namespace Shared
         [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Update([FromBody] {clsHelper.className}FullDTO dto{serviceInjection})
+        public async Task<IActionResult> Update([FromBody] {clsHelper.className}BriefInputDTO dto{serviceInjection})
         {{
             if (dto == null) return BadRequest(""Invalid data payload."");{ownershipCheck}
             bool isUpdated = await {clsHelper.className}.update{clsHelper.objectName}(dto);
@@ -424,20 +437,23 @@ namespace Shared
 
             return $@"
         /// <summary>
-        /// Adds a new record to the database.
+        /// Adds a new record to the database accepting a safe, flat BriefInputDTO.
         /// </summary>
         {authAttribute}
         [HttpPost]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.WritePolicy)]
-        [ProducesResponseType(typeof({clsHelper.className}FullDTO), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof({clsHelper.className}FullOutputDTO), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> Add([FromBody] {clsHelper.className}FullDTO dto)
+        public async Task<IActionResult> Add([FromBody] {clsHelper.className}BriefInputDTO dto)
         {{
             if (dto == null) return BadRequest(""Invalid data payload."");
             int insertedID = await {clsHelper.className}.add{clsHelper.objectName}(dto);
             if (insertedID == -1) return StatusCode(500, ""An error occurred while adding the record."");
-            return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, dto);
+            
+            // Fetch the fully populated output DTO to return
+            var newRecord = await {clsHelper.className}.get{clsHelper.objectName}ByID(insertedID);
+            return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, newRecord);
         }}
 ";
         }
@@ -537,15 +553,15 @@ namespace Shared
 
             return $@"
         /// <summary>
-        /// Retrieves a paginated list of records based on query filters.
+        /// Retrieves a paginated list of records returning a optimized List of BriefOutputDTOs.
         /// </summary>
         {authAttribute}
         [HttpGet(""page"")]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
-        [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(List<{clsHelper.className}BriefOutputDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetPage([FromQuery] int rowsPerPage = 10, [FromQuery] int pageNumber = 1, [FromQuery] string sortColumn = ""{clsHelper.Columns[0].name}"", [FromQuery] string direction = ""ASC"")
         {{
-            List<{clsHelper.className}BriefDTO> list = await {clsHelper.className}.Paging(rowsPerPage, pageNumber, sortColumn, direction);
+            List<{clsHelper.className}BriefOutputDTO> list = await {clsHelper.className}.Paging(rowsPerPage, pageNumber, sortColumn, direction);
             return Ok(list);
         }}
 ";
@@ -571,15 +587,15 @@ namespace Shared
 
             return $@"
         /// <summary>
-        /// Retrieves all matching records in brief format filtered by a specific column.
+        /// Retrieves all matching records filtered by a specific column wrapping them in clean BriefOutputDTOs.
         /// </summary>
         {authAttribute}
         [HttpGet(""{route}"")]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
-        [ProducesResponseType(typeof(List<{clsHelper.className}BriefDTO>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(List<{clsHelper.className}BriefOutputDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({BLLparam})
         {{
-            List<{clsHelper.className}BriefDTO> list = await {clsHelper.className}.{bllMethodName}({bllCallParam});
+            List<{clsHelper.className}BriefOutputDTO> list = await {clsHelper.className}.{bllMethodName}({bllCallParam});
             return Ok(list);
         }}
 ";
@@ -605,15 +621,15 @@ namespace Shared
 
             return $@"
         /// <summary>
-        /// Retrieves all matching records in full format filtered by a specific column.
+        /// Retrieves all matching records filtered by a specific column wrapping them in heavy FullOutputDTOs with nested composition.
         /// </summary>
         {authAttribute}
         [HttpGet(""{route}"")]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.ReadPolicy)]
-        [ProducesResponseType(typeof(List<{clsHelper.className}FullDTO>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(List<{clsHelper.className}FullOutputDTO>), StatusCodes.Status200OK)]
         public async Task<IActionResult> {actionName}({BLLparam})
         {{
-            List<{clsHelper.className}FullDTO> list = await {clsHelper.className}.{bllMethodName}({bllCallParam});
+            List<{clsHelper.className}FullOutputDTO> list = await {clsHelper.className}.{bllMethodName}({bllCallParam});
             return Ok(list);
         }}
 ";

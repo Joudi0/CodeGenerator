@@ -39,6 +39,30 @@ namespace CodeGenerator
             return script.TrimEnd('\n', ',');
         }
 
+        public static string generateInputToOutputMapping(string sourcePrefix = "dto.")
+        {
+            string script = "";
+            string indent = "                ";
+            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.getColumnsForCsharp());
+
+            // Exclude identity, blacklisted and system-controlled roles from input mapping since they aren't in BriefInputDTO
+            columns.RemoveAll(c => clsAPIs.blackList.Contains(c.name.ToLower()));
+            columns.RemoveAll(c =>
+                c.name.ToLower().Contains("isactive") ||
+                c.name.ToLower() == "active" ||
+                c.name.ToLower().Contains("ispremium") ||
+                c.name.ToLower() == "premium" ||
+                c.name.ToLower().Contains("roleid") ||
+                c.name.ToLower().Contains("role")
+            );
+
+            foreach (clsHelper.Column col in columns)
+            {
+                script += $"{indent}{col.name} = {sourcePrefix}{col.name},\n";
+            }
+            return script.TrimEnd('\n', ',');
+        }
+
         // Actual Functions:
         public static string checkLogin()
         {
@@ -80,23 +104,44 @@ namespace CodeGenerator
         public static string getBriefFunc(clsHelper.Column C)
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);
-            string functionName = (columnIndex == 0) ? $"get{clsHelper.objectName}BriefByID" : $"get{clsHelper.objectName}BriefBy{C.name}";
+            string functionName = (columnIndex == 0) ? $"get{clsHelper.objectName}BriefOutputByID" : $"get{clsHelper.objectName}BriefOutputBy{C.name}";
             string dalFunctionName = (columnIndex == 0) ? $"get{clsHelper.objectName}ByID" : $"get{clsHelper.objectName}By{C.name}";
 
+            StringBuilder compositionPopulation = new StringBuilder();
+            foreach (var col in clsHelper.mappedColumns)
+            {
+                if (col.composition)
+                {
+                    string baseEntity = GetCleanClassName(col.name);
+                    string targetBLL = clsHelper.Prefix + baseEntity;
+                    string cleanProp = col.name.Substring(0, col.name.Length - 2);
+                    string propName = char.ToUpper(cleanProp[0]) + cleanProp.Substring(1) + "Details";
+                    string cleanType = col.type.Replace("?", "");
+
+                    compositionPopulation.AppendLine();
+                    compositionPopulation.AppendLine($"            // Populate nested object before mapping to brief");
+                    compositionPopulation.AppendLine($"            if (fullDto.{col.name} != default)");
+                    compositionPopulation.AppendLine($"            {{");
+                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})fullDto.{col.name});");
+                    compositionPopulation.AppendLine($"            }}");
+                }
+            }
+
             return $@"
-        public static async Task<{clsHelper.className}BriefDTO> {functionName}({C.type} {C.name})
+        public static async Task<{clsHelper.className}BriefOutputDTO> {functionName}({C.type} {C.name})
         {{
             // Fetch the full flat record from DAL
             var fullDto = await {DALName}.{dalFunctionName}({C.name});
             if (fullDto == null) return null;
-
-            // Map it instantly in memory to BriefDTO
-            return new {clsHelper.className}BriefDTO
+{compositionPopulation}
+            // Map it instantly in memory to BriefOutputDTO
+            return new {clsHelper.className}BriefOutputDTO
             {{
 {generateBriefMapping("fullDto.")}
             }};
         }}";
         }
+
         public static string getByFunc(clsHelper.Column C)
         {
             int columnIndex = clsHelper.getColumnIndex(C.name);
@@ -114,22 +159,21 @@ namespace CodeGenerator
                     string cleanType = col.type.Replace("?", "");
 
                     compositionPopulation.AppendLine();
-                    compositionPopulation.AppendLine($"            // Directly populate nested object using the single Brief method");
+                    compositionPopulation.AppendLine($"            // Directly populate nested object using the specialized Brief method");
                     compositionPopulation.AppendLine($"            if (fullDto.{col.name} != default)");
                     compositionPopulation.AppendLine($"            {{");
-                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{baseEntity}BriefByID(({cleanType})fullDto.{col.name});");
+                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})fullDto.{col.name});");
                     compositionPopulation.AppendLine($"            }}");
                 }
             }
 
             return $@"
-        public static async Task<{clsHelper.className}FullDTO> {functionName}({C.type} {C.name})
+        public static async Task<{clsHelper.className}FullOutputDTO> {functionName}({C.type} {C.name})
         {{
-            {clsHelper.className}FullDTO fullDto = await {DALName}.{functionName}({C.name});
+            {clsHelper.className}FullOutputDTO fullDto = await {DALName}.{functionName}({C.name});
             if (fullDto == null) return null;
 {compositionPopulation}
             return fullDto;
-        
         }}
 ";
         }
@@ -154,15 +198,14 @@ namespace CodeGenerator
                     continue;
                 }
 
-                if (col.name.ToLower().Contains("roleid")) // Sign up is for users only, so we set the role to User by default
+                if (col.name.ToLower().Contains("roleid"))
                 {
                     fieldsMapping.AppendLine($"            {col.name} = (int)Shared.enRoles.User,");
                     continue;
                 }
 
-                if (col.name.ToLower().Contains("role")) continue; // Skip role name if it exists
+                if (col.name.ToLower().Contains("role")) continue;
 
-                // Enforce true for the active status on the server side and skip the regular mapping line
                 if (col.name.ToLower().Contains("isactive") || col.name.ToLower() == "active")
                 {
                     fieldsMapping.AppendLine($"            {col.name} = true,");
@@ -180,7 +223,7 @@ namespace CodeGenerator
         string salt = clsSecurityHelper.GenerateSalt();
         string hash = clsSecurityHelper.ComputeHash(registerDto.Password, salt);
 
-        var fullDto = new {clsHelper.className}FullDTO
+        var fullDto = new {clsHelper.className}FullOutputDTO
         {{
 {fieldsMapping}        }};
 
@@ -206,22 +249,25 @@ namespace CodeGenerator
             if (!string.IsNullOrEmpty(dto.Password))
             {{
                 string salt = Shared.clsSecurityHelper.GenerateSalt();
-                dto.{saltName} = salt;
-                dto.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
+                fullDto.{saltName} = salt;
+                fullDto.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
             }}
             else
             {{
-                // In a real scenario, you might want to throw an exception here, 
-                // but since the Controller checks it, returning -1 is a safe fallback.
                 return -1;
             }}
 ";
             }
 
             return $@"
-        public static async Task<int> add{clsHelper.objectName}({clsHelper.className}FullDTO dto)
-        {{{passwordHashingLogic}
-            return await {DALName}.add{clsHelper.objectName}(dto);
+        public static async Task<int> add{clsHelper.objectName}({clsHelper.className}BriefInputDTO dto)
+        {{
+            var fullDto = new {clsHelper.className}FullOutputDTO
+            {{
+{generateInputToOutputMapping("dto.")}
+            }};
+{passwordHashingLogic}
+            return await {DALName}.add{clsHelper.objectName}(fullDto);
         }}
 ";
         }
@@ -242,29 +288,33 @@ namespace CodeGenerator
 
                 passwordUpdateLogic = $@"
             // Business Logic: If a new password is provided, re-hash it.
-            // Otherwise, fetch the existing hash and salt to prevent data loss.
             if (!string.IsNullOrEmpty(dto.Password))
             {{
                 string salt = Shared.clsSecurityHelper.GenerateSalt();
-                dto.{saltName} = salt;
-                dto.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
+                fullDto.{saltName} = salt;
+                fullDto.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
             }}
             else
             {{
                 var existingUser = await get{clsHelper.objectName}ByID(dto.{idFieldName});
                 if(existingUser != null)
                 {{
-                    dto.{hashName} = existingUser.{hashName};
-                    dto.{saltName} = existingUser.{saltName};
+                    fullDto.{hashName} = existingUser.{hashName};
+                    fullDto.{saltName} = existingUser.{saltName};
                 }}
             }}
 ";
             }
 
             return $@"
-        public static async Task<bool> update{clsHelper.objectName}({clsHelper.className}FullDTO dto)
-        {{{passwordUpdateLogic}
-            return await {DALName}.update{clsHelper.objectName}(dto);
+        public static async Task<bool> update{clsHelper.objectName}({clsHelper.className}BriefInputDTO dto)
+        {{
+            var fullDto = new {clsHelper.className}FullOutputDTO
+            {{
+{generateInputToOutputMapping("dto.")}
+            }};
+{passwordUpdateLogic}
+            return await {DALName}.update{clsHelper.objectName}(fullDto);
         }}
 ";
         }
@@ -288,15 +338,37 @@ namespace CodeGenerator
 
         public static string PagingFunc()
         {
+            StringBuilder compositionPopulation = new StringBuilder();
+            foreach (var col in clsHelper.mappedColumns)
+            {
+                if (col.composition)
+                {
+                    string baseEntity = GetCleanClassName(col.name);
+                    string targetBLL = clsHelper.Prefix + baseEntity;
+                    string cleanProp = col.name.Substring(0, col.name.Length - 2);
+                    string propName = char.ToUpper(cleanProp[0]) + cleanProp.Substring(1) + "Details";
+                    string cleanType = col.type.Replace("?", "");
+
+                    compositionPopulation.AppendLine();
+                    compositionPopulation.AppendLine($"                // Populate nested object for brief list item");
+                    compositionPopulation.AppendLine($"                if (item.{col.name} != default)");
+                    compositionPopulation.AppendLine($"                {{");
+                    compositionPopulation.AppendLine($"                    item.{propName} = await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})item.{col.name});");
+                    compositionPopulation.AppendLine($"                }}");
+                }
+            }
+
+            string compositionLoop = compositionPopulation.Length > 0 ? compositionPopulation.ToString() : "";
+
             return $@"
-        public static async Task<List<{clsHelper.className}BriefDTO>> Paging(int rowsPerPage, int pageNumber, string sortColumn, string direction)
+        public static async Task<List<{clsHelper.className}BriefOutputDTO>> Paging(int rowsPerPage, int pageNumber, string sortColumn, string direction)
         {{
-            List<{clsHelper.className}FullDTO> fullList = await {DALName}.PagingDAL(rowsPerPage, pageNumber, sortColumn, direction);
-            List<{clsHelper.className}BriefDTO> briefList = new List<{clsHelper.className}BriefDTO>();
+            List<{clsHelper.className}FullOutputDTO> fullList = await {DALName}.PagingDAL(rowsPerPage, pageNumber, sortColumn, direction);
+            List<{clsHelper.className}BriefOutputDTO> briefList = new List<{clsHelper.className}BriefOutputDTO>();
             
-            foreach ({clsHelper.className}FullDTO item in fullList)
-            {{
-                briefList.Add(new {clsHelper.className}BriefDTO
+            foreach ({clsHelper.className}FullOutputDTO item in fullList)
+            {{{compositionLoop}
+                briefList.Add(new {clsHelper.className}BriefOutputDTO
                 {{
 {generateBriefMapping()}
                 }});
@@ -313,19 +385,40 @@ namespace CodeGenerator
 
             string functionName = (columnIndex == 0) ? $"getAllBrief" : $"getAllBriefBy{C.name}";
             string dalFunctionName = (columnIndex == 0) ? $"getAll" : $"getAllBy{C.name}";
-            string existFuncName = (columnIndex == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
             string BLLparam = (columnIndex == 0) ? "" : $"{C.type} {C.name}";
             string DALparam = (columnIndex == 0) ? "" : $"{C.name}";
 
+            StringBuilder compositionPopulation = new StringBuilder();
+            foreach (var col in clsHelper.mappedColumns)
+            {
+                if (col.composition)
+                {
+                    string baseEntity = GetCleanClassName(col.name);
+                    string targetBLL = clsHelper.Prefix + baseEntity;
+                    string cleanProp = col.name.Substring(0, col.name.Length - 2);
+                    string propName = char.ToUpper(cleanProp[0]) + cleanProp.Substring(1) + "Details";
+                    string cleanType = col.type.Replace("?", "");
+
+                    compositionPopulation.AppendLine();
+                    compositionPopulation.AppendLine($"                // Populate nested object for brief list item");
+                    compositionPopulation.AppendLine($"                if (item.{col.name} != default)");
+                    compositionPopulation.AppendLine($"                {{");
+                    compositionPopulation.AppendLine($"                    item.{propName} = await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})item.{col.name});");
+                    compositionPopulation.AppendLine($"                }}");
+                }
+            }
+
+            string compositionLoop = compositionPopulation.Length > 0 ? compositionPopulation.ToString() : "";
+
             return $@"
-        public static async Task<List<{clsHelper.className}BriefDTO>> {functionName}({BLLparam})
+        public static async Task<List<{clsHelper.className}BriefOutputDTO>> {functionName}({BLLparam})
         {{
-            List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({DALparam});
-            List<{clsHelper.className}BriefDTO> briefList = new List<{clsHelper.className}BriefDTO>();
+            List<{clsHelper.className}FullOutputDTO> fullList = await {DALName}.{dalFunctionName}({DALparam});
+            List<{clsHelper.className}BriefOutputDTO> briefList = new List<{clsHelper.className}BriefOutputDTO>();
                 
-            foreach ({clsHelper.className}FullDTO item in fullList)
-            {{
-                briefList.Add(new {clsHelper.className}BriefDTO
+            foreach ({clsHelper.className}FullOutputDTO item in fullList)
+            {{{compositionLoop}
+                briefList.Add(new {clsHelper.className}BriefOutputDTO
                 {{
 {generateBriefMapping("item.")}
                 }});
@@ -340,14 +433,37 @@ namespace CodeGenerator
             int columnIndex = clsHelper.getColumnIndex(C.name);
             string dalFunctionName = (columnIndex == 0) ? $"getAll" : $"getAllBy{C.name}";
             string functionName = (columnIndex == 0) ? $"getAllFull" : $"getAllFullBy{C.name}";
-            string existFuncName = (columnIndex == 0) ? $"is{clsHelper.objectName}ExistByID" : $"is{clsHelper.objectName}ExistBy{C.name}";
             string BLLparam = (columnIndex == 0) ? "" : $"{C.type} {C.name}";
             string DALparam = (columnIndex == 0) ? "" : $"{C.name}";
 
+            StringBuilder compositionPopulation = new StringBuilder();
+            foreach (var col in clsHelper.mappedColumns)
+            {
+                if (col.composition)
+                {
+                    string baseEntity = GetCleanClassName(col.name);
+                    string targetBLL = clsHelper.Prefix + baseEntity;
+                    string cleanProp = col.name.Substring(0, col.name.Length - 2);
+                    string propName = char.ToUpper(cleanProp[0]) + cleanProp.Substring(1) + "Details";
+                    string cleanType = col.type.Replace("?", "");
+
+                    compositionPopulation.AppendLine();
+                    compositionPopulation.AppendLine($"                if (item.{col.name} != default)");
+                    compositionPopulation.AppendLine($"                {{");
+                    compositionPopulation.AppendLine($"                    item.{propName} = await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})item.{col.name});");
+                    compositionPopulation.AppendLine($"                }}");
+                }
+            }
+
+            string compositionLoop = compositionPopulation.Length > 0 ? $@"
+            foreach (var item in fullList)
+            {{
+{compositionPopulation}            }}" : "";
+
             return $@"
-        public static async Task<List<{clsHelper.className}FullDTO>> {functionName}({BLLparam})
+        public static async Task<List<{clsHelper.className}FullOutputDTO>> {functionName}({BLLparam})
         {{
-            List<{clsHelper.className}FullDTO> fullList = await {DALName}.{dalFunctionName}({DALparam});
+            List<{clsHelper.className}FullOutputDTO> fullList = await {DALName}.{dalFunctionName}({DALparam});{compositionLoop}
             return fullList;
         }}
 ";

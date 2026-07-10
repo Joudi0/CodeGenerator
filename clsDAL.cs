@@ -1,17 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Tasks;
 using static CodeGenerator.clsHelper;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace CodeGenerator
 {
     public class clsDAL
     {
-        // Helpers
         static string tabs = "        ";
         public static string addWithValueAllScript(bool withoutFirst = true, string dtoParamName = "dto")
         {
@@ -25,14 +22,12 @@ namespace CodeGenerator
                 script += tabs;
                 string propPath = $"{dtoParamName}.{col.name}";
 
-                // Bulletproof case-insensitive check for database schema status
                 if (col.isNullable.ToUpper() == "NO")
                 {
                     script += $@"command.Parameters.AddWithValue(@""{col.name}"", {propPath});";
                 }
                 else if (col.isNullable.ToUpper() == "YES")
                 {
-                    // Explicitly handling our modern C# Nullable infrastructure
                     switch (col.type)
                     {
                         case "string":
@@ -54,7 +49,6 @@ namespace CodeGenerator
                             break;
 
                         default:
-                            // Safety net: Automatically handles byte[], object, or any unhandled type so parameters are NEVER skipped
                             script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == null) ? DBNull.Value : (object){propPath});";
                             break;
                     }
@@ -103,15 +97,12 @@ namespace CodeGenerator
         // Actual Functions
         public static string getAuthData()
         {
-            // 1. Get the Primary Key (ID) safely from the first index
             clsHelper.Column userID = clsHelper.Columns[0];
 
-            // 2. Fetch Hash, Salt, and Role columns dynamically to avoid hardcoded names
             clsHelper.Column hash = clsHelper.Columns.Find(c => c.name.ToLower().Contains("hash"));
             clsHelper.Column salt = clsHelper.Columns.Find(c => c.name.ToLower().Contains("salt"));
             clsHelper.Column role = clsHelper.Columns.Find(c => c.name.ToLower().Contains("role"));
 
-            // 3. Fallbacks just in case
             clsHelper.Column username = clsHelper.Columns.Find(c => c.name.ToLower().Contains("user") && !c.name.ToLower().Contains("id") && !c.name.ToLower().Contains("role"));
             string hashName = (hash.name != null) ? hash.name : "PasswordHash";
             string saltName = (salt.name != null) ? salt.name : "PasswordSalt";
@@ -151,9 +142,9 @@ namespace CodeGenerator
         {
             if (Columns.Count == 0) return "Error in the lists";
             string FunctionName = (getColumnIndex(C.name) == 0) ? $"get{objectName}ByID" : $"get{objectName}By{C.name}";
-    
-    string Function = $@"
-        public static async Task<{clsHelper.className}FullDTO> {FunctionName}({C.type} {C.name})
+
+            string Function = $@"
+        public static async Task<{clsHelper.className}FullOutputDTO> {FunctionName}({C.type} {C.name})
         {{
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectBy{C.name}"", connection);
@@ -165,7 +156,7 @@ namespace CodeGenerator
                 using SqlDataReader reader = await command.ExecuteReaderAsync();
                 if (await reader.ReadAsync())
                 {{
-                    return new {clsHelper.className}FullDTO
+                    return new {clsHelper.className}FullOutputDTO
                     {{
 {generateFullDTOMapping()}
                     }};
@@ -179,12 +170,11 @@ namespace CodeGenerator
             return Function;
         }
 
-
         public static string updateFunc()
         {
             if (Columns.Count == 0) return "Error in the lists, The Column List is Empty";
             string Function = $@"
-        public static async Task<bool> update{objectName}({clsHelper.className}FullDTO dto)
+        public static async Task<bool> update{objectName}({clsHelper.className}FullOutputDTO dto)
         {{
             int rowsAffected = 0;
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
@@ -206,7 +196,7 @@ namespace CodeGenerator
         {
             if (Columns.Count == 0) return "// There is no Columns to work on!";
             string Function = $@"
-        public static async Task<int> add{objectName}({clsHelper.className}FullDTO dto)
+        public static async Task<int> add{objectName}({clsHelper.className}FullOutputDTO dto)
         {{
             int {objectName}ID = -1;
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
@@ -254,9 +244,9 @@ namespace CodeGenerator
         public static string getAllFunc()
         {
             string Function = $@"
-        public static async Task<List<{clsHelper.className}FullDTO>> getAll()
+        public static async Task<List<{clsHelper.className}FullOutputDTO>> getAll()
         {{
-            List<{clsHelper.className}FullDTO> list = new List<{clsHelper.className}FullDTO>();
+            List<{clsHelper.className}FullOutputDTO> list = new List<{clsHelper.className}FullOutputDTO>();
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAll"", connection);
             command.CommandType = CommandType.StoredProcedure;
@@ -265,12 +255,15 @@ namespace CodeGenerator
             {{
                 await connection.OpenAsync();
                 using SqlDataReader reader = await command.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
+                if (reader.HasRows)
                 {{
-                    list.Add(new {clsHelper.className}FullDTO
+                    while (await reader.ReadAsync())
                     {{
+                        list.Add(new {clsHelper.className}FullOutputDTO
+                        {{
 {generateFullDTOMapping()}
-                    }});
+                        }});
+                    }}
                 }}
             }}
             catch (Exception) {{ throw; }}
@@ -291,9 +284,9 @@ namespace CodeGenerator
             if (Columns.Count == 0) return "Error in the lists";
 
             string Function = $@"
-        public static async Task<List<{clsHelper.className}FullDTO>> {FunctionName}({C.type} {C.name})
+        public static async Task<List<{clsHelper.className}FullOutputDTO>> {FunctionName}({C.type} {C.name})
         {{
-            List<{clsHelper.className}FullDTO> list = new List<{clsHelper.className}FullDTO>();
+            List<{clsHelper.className}FullOutputDTO> list = new List<{clsHelper.className}FullOutputDTO>();
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAllBy{C.name}"", connection);
             command.CommandType = CommandType.StoredProcedure;
@@ -303,12 +296,15 @@ namespace CodeGenerator
             {{
                 await connection.OpenAsync();
                 using SqlDataReader reader = await command.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
+                if (reader.HasRows)
                 {{
-                    list.Add(new {clsHelper.className}FullDTO
+                    while (await reader.ReadAsync())
                     {{
+                        list.Add(new {clsHelper.className}FullOutputDTO
+                        {{
 {generateFullDTOMapping()}
-                    }});
+                        }});
+                    }}
                 }}
             }}
             catch (Exception) {{ throw; }}
@@ -356,9 +352,9 @@ namespace CodeGenerator
             if (Columns.Count == 0) return "Error in the lists";
 
             string Function = $@"
-        public static async Task<List<{clsHelper.className}FullDTO>> PagingDAL(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
+        public static async Task<List<{clsHelper.className}FullOutputDTO>> PagingDAL(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
         {{
-            List<{clsHelper.className}FullDTO> list = new List<{clsHelper.className}FullDTO>();
+            List<{clsHelper.className}FullOutputDTO> list = new List<{clsHelper.className}FullOutputDTO>();
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Paging"", connection);
             command.CommandType = CommandType.StoredProcedure;
@@ -371,12 +367,15 @@ namespace CodeGenerator
             {{
                 await connection.OpenAsync();
                 using SqlDataReader reader = await command.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
+                if (reader.HasRows)
                 {{
-                    list.Add(new {clsHelper.className}FullDTO
+                    while (await reader.ReadAsync())
                     {{
+                        list.Add(new {clsHelper.className}FullOutputDTO
+                        {{
 {generateFullDTOMapping()}
-                    }});
+                        }});
+                    }}
                 }}
             }}
             catch (Exception) {{ throw; }}

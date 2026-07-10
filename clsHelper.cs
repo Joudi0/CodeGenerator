@@ -27,8 +27,8 @@ namespace CodeGenerator
         public static List<Column> Columns { get; set; }
         public static List<Column> mappedColumns { get; set; }
         public static List<Column> ColumnsForCsharp { get; set; }
-        public static List<string> allEntities { get; set; }
-        public static List<string> AvailableRoles { get; set; }
+        public static List<string> allEntities { get; set; } = new List<string>();
+        public static List<string> AvailableRoles { get; set; } = new List<string>();
         public static string Prefix { get; set; }
 
         // The global dopamine counter!
