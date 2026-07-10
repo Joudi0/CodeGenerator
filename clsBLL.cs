@@ -12,6 +12,41 @@ namespace CodeGenerator
         public static string tabs = "        ";
 
         // Helpers Functions:
+
+        public static string generateBriefInputToOutputMapping(string sourcePrefix = "dto.")
+        {
+            string script = "";
+            string indent = "                ";
+            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.getColumnsForCsharp());
+
+            columns.RemoveAll(c => clsAPIs.blackList.Contains(c.name.ToLower()));
+            columns.RemoveAll(c =>
+                c.name.ToLower().Contains("isactive") || c.name.ToLower() == "active" ||
+                c.name.ToLower().Contains("ispremium") || c.name.ToLower() == "premium" ||
+                c.name.ToLower().Contains("roleid") || c.name.ToLower().Contains("role")
+            );
+
+            foreach (clsHelper.Column col in columns)
+            {
+                script += $"{indent}{col.name} = {sourcePrefix}{col.name},\n";
+            }
+            return script.TrimEnd('\n', ',');
+        }
+
+        public static string generateFullInputToOutputMapping(string sourcePrefix = "dto.")
+        {
+            string script = "";
+            string indent = "                ";
+            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.getColumnsForCsharp());
+
+            columns.RemoveAll(c => clsAPIs.blackList.Contains(c.name.ToLower()));
+
+            foreach (clsHelper.Column col in columns)
+            {
+                script += $"{indent}{col.name} = {sourcePrefix}{col.name},\n";
+            }
+            return script.TrimEnd('\n', ',');
+        }
         public static string generateBriefMapping(string sourcePrefix = "item.")
         {
             string script = "";
@@ -231,10 +266,11 @@ namespace CodeGenerator
     }}";
         }
 
-        public static string addFunc()
+        public static string updateBriefFunc()
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-            string passwordHashingLogic = "";
+            string idFieldName = clsHelper.ColumnsForCsharp[0].name;
+            string passwordUpdateLogic = "";
 
             if (isUser)
             {
@@ -244,35 +280,36 @@ namespace CodeGenerator
                 string hashName = (hashColumn.name != null) ? hashColumn.name : "PasswordHash";
                 string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
 
-                passwordHashingLogic = $@"
-            // Business Logic: Automatically generate secure hash and salt for the new user record
+                passwordUpdateLogic = $@"
+            // Business Logic: If a new password is provided by the user, re-hash it.
             if (!string.IsNullOrEmpty(dto.Password))
             {{
                 string salt = Shared.clsSecurityHelper.GenerateSalt();
-                fullDto.{saltName} = salt;
-                fullDto.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
-            }}
-            else
-            {{
-                return -1;
-            }}
-";
+                existingRecord.{saltName} = salt;
+                existingRecord.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
+            }}";
             }
 
             return $@"
-        public static async Task<int> add{clsHelper.objectName}({clsHelper.className}BriefInputDTO dto)
+        /// <summary>
+        /// Safe update for regular users using BriefInputDTO. Preserves system-controlled fields.
+        /// </summary>
+        public static async Task<bool> update{clsHelper.objectName}({clsHelper.className}BriefInputDTO dto)
         {{
-            var fullDto = new {clsHelper.className}FullOutputDTO
-            {{
-{generateInputToOutputMapping("dto.")}
-            }};
-{passwordHashingLogic}
-            return await {DALName}.add{clsHelper.objectName}(fullDto);
+            // 1. Fetch the existing full record to preserve internal data (Roles, Active status, Balance, etc.)
+            var existingRecord = await get{clsHelper.objectName}ByID(dto.{idFieldName});
+            if (existingRecord == null) return false;
+
+            // 2. Safely overwrite only the client-editable properties
+{generateInputToOutputOverwrite("existingRecord.", "dto.")}
+{passwordUpdateLogic}
+            // 3. Forward the fully preserved record to the DAL layer
+            return await {DALName}.update{clsHelper.objectName}(existingRecord);
         }}
 ";
         }
 
-        public static string updateFunc()
+        public static string updateFullFunc()
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
             string passwordUpdateLogic = "";
@@ -287,7 +324,7 @@ namespace CodeGenerator
                 string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
 
                 passwordUpdateLogic = $@"
-            // Business Logic: If a new password is provided, re-hash it.
+            // Business Logic: Admin-driven password overwrite
             if (!string.IsNullOrEmpty(dto.Password))
             {{
                 string salt = Shared.clsSecurityHelper.GenerateSalt();
@@ -302,19 +339,116 @@ namespace CodeGenerator
                     fullDto.{hashName} = existingUser.{hashName};
                     fullDto.{saltName} = existingUser.{saltName};
                 }}
-            }}
-";
+            }}";
             }
 
             return $@"
-        public static async Task<bool> update{clsHelper.objectName}({clsHelper.className}BriefInputDTO dto)
+        /// <summary>
+        /// Administrative full update using FullInputDTO. Allows modification of all columns.
+        /// </summary>
+        public static async Task<bool> update{clsHelper.objectName}({clsHelper.className}FullInputDTO dto)
         {{
             var fullDto = new {clsHelper.className}FullOutputDTO
             {{
-{generateInputToOutputMapping("dto.")}
+{generateFullInputToOutputMapping("dto.")}
             }};
 {passwordUpdateLogic}
             return await {DALName}.update{clsHelper.objectName}(fullDto);
+        }}
+";
+        }
+
+        public static string addFunc()
+        {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string passwordHashingLogic = "";
+            string defaultInjections = "";
+
+            foreach (var col in clsHelper.ColumnsForCsharp)
+            {
+                if (col.name.ToLower().Contains("isactive") || col.name.ToLower() == "active")
+                {
+                    defaultInjections += $"            fullDto.{col.name} = true;\n";
+                }
+                if (isUser && (col.name.ToLower().Contains("roleid")))
+                {
+                    defaultInjections += $"            fullDto.{col.name} = (int)Shared.enRoles.User;\n";
+                }
+            }
+
+            if (isUser)
+            {
+                clsHelper.Column hashColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("hash"));
+                clsHelper.Column saltColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("salt"));
+
+                string hashName = (hashColumn.name != null) ? hashColumn.name : "PasswordHash";
+                string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
+
+                passwordHashingLogic = $@"
+            // Business Logic: Generate cryptography properties securely behind the scenes
+            if (!string.IsNullOrEmpty(dto.Password))
+            {{
+                string salt = Shared.clsSecurityHelper.GenerateSalt();
+                fullDto.{saltName} = salt;
+                fullDto.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
+            }}
+            else
+            {{
+                return -1;
+            }}";
+            }
+
+            return $@"
+        /// <summary>
+        /// Adds a new record into the system, automatically embedding internal business rules and states.
+        /// </summary>
+        public static async Task<int> add{clsHelper.objectName}({clsHelper.className}BriefInputDTO dto)
+        {{
+            var fullDto = new {clsHelper.className}FullOutputDTO
+            {{
+{generateBriefInputToOutputMapping("dto.")}
+            }};
+{defaultInjections}{passwordHashingLogic}
+            return await {DALName}.add{clsHelper.objectName}(fullDto);
+        }}
+";
+        }
+
+        public static string addAdminFunc()
+        {
+            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
+            string passwordHashingLogic = "";
+
+            if (isUser)
+            {
+                clsHelper.Column hashColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("hash"));
+                clsHelper.Column saltColumn = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("salt"));
+
+                string hashName = (hashColumn.name != null) ? hashColumn.name : "PasswordHash";
+                string saltName = (saltColumn.name != null) ? saltColumn.name : "PasswordSalt";
+
+                passwordHashingLogic = $@"
+            // Business Logic: Generate cryptography properties for Admin-driven user creation
+            if (!string.IsNullOrEmpty(dto.Password))
+            {{
+                string salt = Shared.clsSecurityHelper.GenerateSalt();
+                fullDto.{saltName} = salt;
+                fullDto.{hashName} = Shared.clsSecurityHelper.ComputeHash(dto.Password, salt);
+            }}";
+            }
+
+            return $@"
+        /// <summary>
+        /// Administrative add: Accepts FullInputDTO to allow setting all fields (Role, Status, etc.).
+        /// </summary>
+        public static async Task<int> addAdmin{clsHelper.objectName}({clsHelper.className}FullInputDTO dto)
+        {{
+            var fullDto = new {clsHelper.className}FullOutputDTO
+            {{
+{generateFullInputToOutputMapping("dto.")}
+            }};
+{passwordHashingLogic}
+            return await {DALName}.add{clsHelper.objectName}(fullDto);
         }}
 ";
         }
@@ -335,6 +469,7 @@ namespace CodeGenerator
         }}
 ";
         }
+
 
         public static string PagingFunc()
         {
@@ -367,7 +502,8 @@ namespace CodeGenerator
             List<{clsHelper.className}BriefOutputDTO> briefList = new List<{clsHelper.className}BriefOutputDTO>();
             
             foreach ({clsHelper.className}FullOutputDTO item in fullList)
-            {{{compositionLoop}
+            {{
+{compositionLoop}
                 briefList.Add(new {clsHelper.className}BriefOutputDTO
                 {{
 {generateBriefMapping()}
@@ -417,7 +553,8 @@ namespace CodeGenerator
             List<{clsHelper.className}BriefOutputDTO> briefList = new List<{clsHelper.className}BriefOutputDTO>();
                 
             foreach ({clsHelper.className}FullOutputDTO item in fullList)
-            {{{compositionLoop}
+            {{
+{compositionLoop}
                 briefList.Add(new {clsHelper.className}BriefOutputDTO
                 {{
 {generateBriefMapping("item.")}

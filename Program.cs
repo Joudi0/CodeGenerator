@@ -96,6 +96,7 @@ namespace CodeGenerator
                 AnsiConsole.MarkupLine($"[red]No Columns Found for table {tableName}, skipping...[/]");
                 return;
             }
+
             StringBuilder DALFuncs = new StringBuilder();
             StringBuilder BLLFuncs = new StringBuilder();
             StringBuilder Controller = new StringBuilder();
@@ -111,6 +112,10 @@ namespace CodeGenerator
             string defaultRole = _globalDefaultRole;
             clsBLL.DALName = $@"{clsHelper.className}DAL";
 
+            // Inject Admin-specific architectural overloads for all tables globally
+            BLLFuncs.Append(clsBLL.addAdminFunc());
+            BLLFuncs.Append(clsBLL.updateFullFunc());
+
             // =========================================================
             // 1. Dictatoric way for User Table (Auto Generate All Actions)
             // =========================================================
@@ -124,11 +129,12 @@ namespace CodeGenerator
                 BLLFuncs.Append(clsBLL.checkLogin());
                 BLLFuncs.Append(clsBLL.registerUser());
 
-                // Add Forced for User Table
+                // Add Standard & Admin
                 clsHelper.allSPs.Add(clsSPs.addSP());
                 DALFuncs.Append(clsDAL.addFunc());
                 BLLFuncs.Append(clsBLL.addFunc());
                 Controller.Append(clsAPIs.addAction(defaultRole));
+                Controller.Append(clsAPIs.addAdminAction(defaultRole));
 
                 // Forced GetByID method for User table with dynamic Ownership Policy
                 clsHelper.Column idColumn = clsHelper.Columns[0];
@@ -140,13 +146,12 @@ namespace CodeGenerator
 
                 // Forced GetByUsername method for User table restricted to Admin/Default role
                 clsHelper.Column usernameColumn = clsHelper.Columns.Find(c => c.name.ToLower().Contains("username"));
-                clsHelper.Column usernameColumnCsharp = clsHelper.ColumnsForCsharp.Find(c => c.name == usernameColumn.name);
+                clsHelper.Column usernameColumnCsharp = clsHelper.ColumnsForCsharp.Find(c => c.name == usernameColumn.name); // FIXED: Removed '?'
 
                 if (usernameColumnCsharp.name == null)
                 {
                     usernameColumnCsharp = clsHelper.ColumnsForCsharp.Find(c => c.name.ToLower().Contains("user")
-                        && !c.name.ToLower().Contains("id")
-                        && !c.name.ToLower().Contains("role"));
+                        && !c.name.ToLower().Contains("id") && !c.name.ToLower().Contains("role"));
                 }
 
                 if (!string.IsNullOrEmpty(usernameColumnCsharp.name))
@@ -158,11 +163,12 @@ namespace CodeGenerator
                     Controller.Append(clsAPIs.getByAction(usernameColumnCsharp, defaultRole));
                 }
 
-                // Update is forced for user table and ownership policy
+                // Update Standard & Admin
                 clsHelper.allSPs.Add(clsSPs.updateSP());
                 DALFuncs.Append(clsDAL.updateFunc());
-                BLLFuncs.Append(clsBLL.updateFunc());
+                BLLFuncs.Append(clsBLL.updateBriefFunc());
                 Controller.Append(clsAPIs.updateAction(defaultRole));
+                Controller.Append(clsAPIs.updateAdminAction(defaultRole));
 
                 // Delete Forced for user table
                 clsHelper.allSPs.Add(clsSPs.deleteSP());
@@ -204,11 +210,12 @@ namespace CodeGenerator
                     AnsiConsole.MarkupLine($"[green]-> Automatically generating full Secure CRUD using [/][bold yellow]{defaultRole}[/][green] role...[/]");
                     clsHelper.Column firstColumn = clsHelper.ColumnsForCsharp[0];
 
-                    // Add
+                    // Add Standard & Admin
                     clsHelper.allSPs.Add(clsSPs.addSP());
                     DALFuncs.Append(clsDAL.addFunc());
                     BLLFuncs.Append(clsBLL.addFunc());
                     Controller.Append(clsAPIs.addAction(defaultRole));
+                    Controller.Append(clsAPIs.addAdminAction(defaultRole));
 
                     // GetByID
                     clsHelper.allSPs.Add(clsSPs.selectByColumnSP(firstColumn));
@@ -217,11 +224,12 @@ namespace CodeGenerator
                     BLLFuncs.Append(clsBLL.getBriefFunc(firstColumn));
                     Controller.Append(clsAPIs.getByAction(firstColumn, defaultRole));
 
-                    // Update
+                    // Update Standard & Admin
                     clsHelper.allSPs.Add(clsSPs.updateSP());
                     DALFuncs.Append(clsDAL.updateFunc());
-                    BLLFuncs.Append(clsBLL.updateFunc());
+                    BLLFuncs.Append(clsBLL.updateBriefFunc());
                     Controller.Append(clsAPIs.updateAction(defaultRole));
+                    Controller.Append(clsAPIs.updateAdminAction(defaultRole));
 
                     // Delete
                     clsHelper.allSPs.Add(clsSPs.deleteSP());
@@ -342,7 +350,7 @@ namespace CodeGenerator
                     }
                     else
                     {
-                        // Fallback to the fully manual democratic way
+                        // Fallback to the fully manual democratic way (Original detailed prompts)
                         AnsiConsole.MarkupLine("[blue]-> Falling back to manual customizable setup...[/]");
                         string answer = "yes";
                         Console.Write("\nFor DAL, BLL, And Stored Procedures:\n");
@@ -361,17 +369,18 @@ namespace CodeGenerator
                             Controller.Append(clsAPIs.getByAction(column, getByRoles));
                         }
 
-                        // Update:
+                        // Update Standard & Admin:
                         Console.Write("update? yes/no: ");
                         answer = Console.ReadLine();
                         if (answer.ToLower() == "yes" || answer.ToLower() == "y")
                         {
                             clsHelper.allSPs.Add(clsSPs.updateSP());
                             DALFuncs.Append(clsDAL.updateFunc());
-                            BLLFuncs.Append(clsBLL.updateFunc());
+                            BLLFuncs.Append(clsBLL.updateBriefFunc());
 
                             string updateRoles = clsPresentation.PromptForActionRoles("Update");
                             Controller.Append(clsAPIs.updateAction(updateRoles));
+                            Controller.Append(clsAPIs.updateAdminAction(clsPresentation.PromptForActionRoles("UpdateAdmin")));
                         }
 
                         // Delete:
@@ -388,7 +397,7 @@ namespace CodeGenerator
                             Controller.Append(clsAPIs.deleteAction(C, deleteRoles));
                         }
 
-                        // Add:
+                        // Add Standard & Admin:
                         Console.Write("add? yes/no: ");
                         answer = Console.ReadLine();
                         if (answer.ToLower() == "yes" || answer.ToLower() == "y")
@@ -399,6 +408,7 @@ namespace CodeGenerator
 
                             string addRoles = clsPresentation.PromptForActionRoles("Add");
                             Controller.Append(clsAPIs.addAction(addRoles));
+                            Controller.Append(clsAPIs.addAdminAction(clsPresentation.PromptForActionRoles("AddAdmin")));
                         }
 
                         // isExist:

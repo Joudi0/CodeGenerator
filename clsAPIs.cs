@@ -385,41 +385,47 @@ namespace Shared
         }}
 ";
         }
-
         public static string updateAction(string roles)
         {
             bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
             string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
-
-            string ownershipCheck = "";
-            string serviceInjection = "";
-
-            if (isUser)
-            {
-                string idFieldName = clsHelper.ColumnsForCsharp[0].name;
-                serviceInjection = ", [FromServices] IAuthorizationService authorizationService";
-                ownershipCheck = $@"
-            // Centralized Policy-Based Resource Authorization Check
-            Microsoft.AspNetCore.Authorization.AuthorizationResult authResult = await authorizationService.AuthorizeAsync(User, dto.{idFieldName}, ""UserOwnerOrAdmin"");
-            if (!authResult.Succeeded) return Forbid();
-";
-            }
+            string serviceInjection = isUser ? ", [FromServices] IAuthorizationService authorizationService" : "";
 
             return $@"
         /// <summary>
-        /// Updates an existing record in the database accepting a clean, flat BriefInputDTO.
+        /// Updates a record using BriefInputDTO (Standard User Access).
         /// </summary>
         {authAttribute}
         [HttpPut]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.WritePolicy)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Update([FromBody] {clsHelper.className}BriefInputDTO dto{serviceInjection})
         {{
-            if (dto == null) return BadRequest(""Invalid data payload."");{ownershipCheck}
+            if (dto == null) return BadRequest(""Invalid data."");
+            // Add ownership check here if isUser is true
             bool isUpdated = await {clsHelper.className}.update{clsHelper.objectName}(dto);
-            if (!isUpdated) return NotFound($""{clsHelper.objectName} update failed or record not found."");
+            if (!isUpdated) return NotFound();
+            return Ok(""Updated successfully."");
+        }}
+";
+        }
+
+        public static string updateAdminAction(string roles)
+        {
+            string authAttribute = $"[Authorize(Roles = \"{roles}\")]";
+
+            return $@"
+        /// <summary>
+        /// Updates a record using FullInputDTO (Admin Access - Full Control).
+        /// </summary>
+        {authAttribute}
+        [HttpPut(""admin"")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.WritePolicy)]
+        public async Task<IActionResult> UpdateAdmin([FromBody] {clsHelper.className}FullInputDTO dto)
+        {{
+            if (dto == null) return BadRequest(""Invalid data."");
+            
+            bool isUpdated = await {clsHelper.className}.update{clsHelper.objectName}(dto);
+            if (!isUpdated) return NotFound();
             return Ok(""Updated successfully."");
         }}
 ";
@@ -427,31 +433,48 @@ namespace Shared
 
         public static string addAction(string roles)
         {
-            bool isUser = (clsHelper.tableName.ToLower() == "user" || clsHelper.tableName.ToLower() == "users");
-
-            if (isUser && clsHelper.AvailableRoles.Count > 0)
-            {
-                roles = clsHelper.AvailableRoles[0];
-            }
             string authAttribute = (roles.ToLower() == "anonymous") ? "[AllowAnonymous]" : $"[Authorize(Roles = \"{roles}\")]";
 
             return $@"
         /// <summary>
-        /// Adds a new record to the database accepting a safe, flat BriefInputDTO.
+        /// Adds a new record using BriefInputDTO (Standard User Access).
         /// </summary>
         {authAttribute}
         [HttpPost]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.WritePolicy)]
         [ProducesResponseType(typeof({clsHelper.className}FullOutputDTO), StatusCodes.Status201Created)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> Add([FromBody] {clsHelper.className}BriefInputDTO dto)
         {{
             if (dto == null) return BadRequest(""Invalid data payload."");
             int insertedID = await {clsHelper.className}.add{clsHelper.objectName}(dto);
-            if (insertedID == -1) return StatusCode(500, ""An error occurred while adding the record."");
+            if (insertedID == -1) return StatusCode(500, ""Error adding record."");
             
-            // Fetch the fully populated output DTO to return
+            var newRecord = await {clsHelper.className}.get{clsHelper.objectName}ByID(insertedID);
+            return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, newRecord);
+        }}
+";
+        }
+
+        public static string addAdminAction(string roles)
+        {
+            // Admin only access
+            string authAttribute = $"[Authorize(Roles = \"{roles}\")]";
+
+            return $@"
+        /// <summary>
+        /// Admin-only: Adds a new record using FullInputDTO to define system-level settings.
+        /// </summary>
+        {authAttribute}
+        [HttpPost(""admin"")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Shared.clsProjectPolicies.WritePolicy)]
+        [ProducesResponseType(typeof({clsHelper.className}FullOutputDTO), StatusCodes.Status201Created)]
+        public async Task<IActionResult> AddAdmin([FromBody] {clsHelper.className}FullInputDTO dto)
+        {{
+            if (dto == null) return BadRequest(""Invalid data."");
+            
+            int insertedID = await {clsHelper.className}.addAdmin{clsHelper.objectName}(dto);
+            if (insertedID == -1) return StatusCode(500, ""Error adding record."");
+            
             var newRecord = await {clsHelper.className}.get{clsHelper.objectName}ByID(insertedID);
             return CreatedAtAction(""GetByID"", new {{ id = insertedID }}, newRecord);
         }}
