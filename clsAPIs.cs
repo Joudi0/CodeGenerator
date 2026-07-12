@@ -692,7 +692,7 @@ namespace WebAPI.Controllers
 {{
     [ApiController]
     [Route(""api/[controller]"")]
-    public class {clsHelper.objectName}Controller : ControllerBase
+    public class {clsHelper.className}Controller : ControllerBase
     {{
 {injectedActions}
     }}

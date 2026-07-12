@@ -403,7 +403,7 @@ using System.Threading.Tasks;
 using Shared;
 namespace DAL
 {{
-    public class cls{objectName}DAL
+    public class {className}DAL
     {{  
 {injectedString}  
     }}
