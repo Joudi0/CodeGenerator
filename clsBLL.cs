@@ -171,10 +171,10 @@ namespace CodeGenerator
                     string cleanType = col.type.Replace("?", "");
 
                     compositionPopulation.AppendLine();
-                    compositionPopulation.AppendLine($"            // Directly populate nested object using the specialized Brief method");
+                    compositionPopulation.AppendLine($"            // Directly populate nested object using the specialized Full method");
                     compositionPopulation.AppendLine($"            if (fullDto.{col.name} != default)");
                     compositionPopulation.AppendLine($"            {{");
-                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})fullDto.{col.name});");
+                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{baseEntity}FullOutputByID(({cleanType})fullDto.{col.name});");
                     compositionPopulation.AppendLine($"            }}");
                 }
             }
