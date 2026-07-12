@@ -15,6 +15,10 @@ namespace CodeGenerator
         private static string _globalDefaultRole = "Admin";
         private static string prefix = "";
 
+        // الـ Enum لتحديد نوع قاعدة البيانات
+        public enum enDatabaseType { SqlServer, MySql, Postgres }
+        private static enDatabaseType _selectedDbType;
+
         static async Task Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
@@ -26,6 +30,15 @@ namespace CodeGenerator
             AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator v3.0 (Stable) [/]").Justify(Justify.Left));
             AnsiConsole.MarkupLine("[grey]This tool generates SPs, DAL, BLL, Controllers, and Security For you.[/]");
             AnsiConsole.MarkupLine("[red]Notice:[/] Please ensure database settings are configured in [cyan]clsHelper.connectionString[/].\n");
+
+            // برومبت فخم باستخدام Spectre.Console لاختيار الداتابيز
+            _selectedDbType = AnsiConsole.Prompt(
+                new SelectionPrompt<enDatabaseType>()
+                    .Title("Select target [yellow]Database Type[/] for Code Generation:")
+                    .PageSize(5)
+                    .AddChoices(enDatabaseType.SqlServer, enDatabaseType.MySql, enDatabaseType.Postgres));
+
+            AnsiConsole.MarkupLine($"[green]✔ Target Database Set To:[/] [bold cyan]{_selectedDbType}[/]\n");
 
             Console.Write("New Solution? (y/n): ");
             string answer = Console.ReadLine();
@@ -125,13 +138,13 @@ namespace CodeGenerator
 
                 // Basic Authentication and Authorization (Login and Register)
                 clsHelper.allSPs.Add(clsSPs.loginSP());
-                DALFuncs.Append(clsDAL.getAuthData());
+                DALFuncs.Append(GetAuthData());
                 BLLFuncs.Append(clsBLL.checkLogin());
                 BLLFuncs.Append(clsBLL.registerUser());
 
                 // Add Standard & Admin
                 clsHelper.allSPs.Add(clsSPs.addSP());
-                DALFuncs.Append(clsDAL.addFunc());
+                DALFuncs.Append(GetAddFunc());
                 BLLFuncs.Append(clsBLL.addFunc());
                 Controller.Append(clsAPIs.addAction(defaultRole));
                 Controller.Append(clsAPIs.addAdminAction(defaultRole));
@@ -139,14 +152,14 @@ namespace CodeGenerator
                 // Forced GetByID method for User table with dynamic Ownership Policy
                 clsHelper.Column idColumn = clsHelper.Columns[0];
                 clsHelper.allSPs.Add(clsSPs.selectByColumnSP(idColumn));
-                DALFuncs.Append(clsDAL.getRecordByColumnFunc(idColumn));
+                DALFuncs.Append(GetRecordByColumnFunc(idColumn));
                 BLLFuncs.Append(clsBLL.getByFunc(idColumn));
                 BLLFuncs.Append(clsBLL.getBriefFunc(idColumn));
                 Controller.Append(clsAPIs.getByAction(idColumn, defaultRole));
 
                 // Forced GetByUsername method for User table restricted to Admin/Default role
                 clsHelper.Column usernameColumn = clsHelper.Columns.Find(c => c.name.ToLower().Contains("username"));
-                clsHelper.Column usernameColumnCsharp = clsHelper.ColumnsForCsharp.Find(c => c.name == usernameColumn.name); // FIXED: Removed '?'
+                clsHelper.Column usernameColumnCsharp = clsHelper.ColumnsForCsharp.Find(c => c.name == usernameColumn.name);
 
                 if (usernameColumnCsharp.name == null)
                 {
@@ -157,7 +170,7 @@ namespace CodeGenerator
                 if (!string.IsNullOrEmpty(usernameColumnCsharp.name))
                 {
                     clsHelper.allSPs.Add(clsSPs.selectByColumnSP(usernameColumn));
-                    DALFuncs.Append(clsDAL.getRecordByColumnFunc(usernameColumnCsharp));
+                    DALFuncs.Append(GetRecordByColumnFunc(usernameColumnCsharp));
                     BLLFuncs.Append(clsBLL.getByFunc(usernameColumnCsharp));
                     BLLFuncs.Append(clsBLL.getBriefFunc(usernameColumnCsharp));
                     Controller.Append(clsAPIs.getByAction(usernameColumnCsharp, defaultRole));
@@ -165,31 +178,31 @@ namespace CodeGenerator
 
                 // Update Standard & Admin
                 clsHelper.allSPs.Add(clsSPs.updateSP());
-                DALFuncs.Append(clsDAL.updateFunc());
+                DALFuncs.Append(GetUpdateFunc());
                 BLLFuncs.Append(clsBLL.updateBriefFunc());
                 Controller.Append(clsAPIs.updateAction(defaultRole));
                 Controller.Append(clsAPIs.updateAdminAction(defaultRole));
 
                 // Delete Forced for user table
                 clsHelper.allSPs.Add(clsSPs.deleteSP());
-                DALFuncs.Append(clsDAL.deleteFunc(idColumn));
+                DALFuncs.Append(GetDeleteFunc(idColumn));
                 BLLFuncs.Append(clsBLL.deleteFunc(idColumn));
                 Controller.Append(clsAPIs.deleteAction(idColumn, defaultRole));
 
                 // IsExists Forced for user table
                 clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(idColumn));
-                DALFuncs.Append(clsDAL.isExistsFunc(idColumn));
+                DALFuncs.Append(GetIsExistsFunc(idColumn));
                 BLLFuncs.Append(clsBLL.isExistsFunc(idColumn));
                 Controller.Append(clsAPIs.isExistAction(idColumn, defaultRole));
 
                 // Paging Forced for user table
                 clsHelper.allSPs.Add(clsSPs.PagingSP());
-                DALFuncs.Append(clsDAL.PagingFunc());
+                DALFuncs.Append(GetPagingFunc());
                 BLLFuncs.Append(clsBLL.PagingFunc());
                 Controller.Append(clsAPIs.pagingAction(defaultRole));
 
                 // getAll Forced for user table
-                DALFuncs.Append(clsDAL.getAllFunc());
+                DALFuncs.Append(GetAllFunc());
                 BLLFuncs.Append(clsBLL.getAllBriefByFunc(idColumn));
                 BLLFuncs.Append(clsBLL.getAllFullByFunc(idColumn));
                 Controller.Append(clsAPIs.getAllBriefByAction(idColumn, defaultRole));
@@ -212,45 +225,45 @@ namespace CodeGenerator
 
                     // Add Standard & Admin
                     clsHelper.allSPs.Add(clsSPs.addSP());
-                    DALFuncs.Append(clsDAL.addFunc());
+                    DALFuncs.Append(GetAddFunc());
                     BLLFuncs.Append(clsBLL.addFunc());
                     Controller.Append(clsAPIs.addAction(defaultRole));
                     Controller.Append(clsAPIs.addAdminAction(defaultRole));
 
                     // GetByID
                     clsHelper.allSPs.Add(clsSPs.selectByColumnSP(firstColumn));
-                    DALFuncs.Append(clsDAL.getRecordByColumnFunc(firstColumn));
+                    DALFuncs.Append(GetRecordByColumnFunc(firstColumn));
                     BLLFuncs.Append(clsBLL.getByFunc(firstColumn));
                     BLLFuncs.Append(clsBLL.getBriefFunc(firstColumn));
                     Controller.Append(clsAPIs.getByAction(firstColumn, defaultRole));
 
                     // Update Standard & Admin
                     clsHelper.allSPs.Add(clsSPs.updateSP());
-                    DALFuncs.Append(clsDAL.updateFunc());
+                    DALFuncs.Append(GetUpdateFunc());
                     BLLFuncs.Append(clsBLL.updateBriefFunc());
                     Controller.Append(clsAPIs.updateAction(defaultRole));
                     Controller.Append(clsAPIs.updateAdminAction(defaultRole));
 
                     // Delete
                     clsHelper.allSPs.Add(clsSPs.deleteSP());
-                    DALFuncs.Append(clsDAL.deleteFunc(firstColumn));
+                    DALFuncs.Append(GetDeleteFunc(firstColumn));
                     BLLFuncs.Append(clsBLL.deleteFunc(firstColumn));
                     Controller.Append(clsAPIs.deleteAction(firstColumn, defaultRole));
 
                     // IsExist
                     clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(firstColumn));
-                    DALFuncs.Append(clsDAL.isExistsFunc(firstColumn));
+                    DALFuncs.Append(GetIsExistsFunc(firstColumn));
                     BLLFuncs.Append(clsBLL.isExistsFunc(firstColumn));
                     Controller.Append(clsAPIs.isExistAction(firstColumn, defaultRole));
 
                     // Paging
                     clsHelper.allSPs.Add(clsSPs.PagingSP());
-                    DALFuncs.Append(clsDAL.PagingFunc());
+                    DALFuncs.Append(GetPagingFunc());
                     BLLFuncs.Append(clsBLL.PagingFunc());
                     Controller.Append(clsAPIs.pagingAction(defaultRole));
 
                     // GetAll
-                    DALFuncs.Append(clsDAL.getAllFunc());
+                    DALFuncs.Append(GetAllFunc());
                     BLLFuncs.Append(clsBLL.getAllBriefByFunc(firstColumn));
                     BLLFuncs.Append(clsBLL.getAllFullByFunc(firstColumn));
                     Controller.Append(clsAPIs.getAllBriefByAction(firstColumn, defaultRole));
@@ -272,7 +285,7 @@ namespace CodeGenerator
                             clsHelper.Column columnCsharp = clsHelper.mappedColumns.Find(c => c.name == colName);
 
                             clsHelper.allSPs.Add(clsSPs.selectByColumnSP(columnSql));
-                            DALFuncs.Append(clsDAL.getRecordByColumnFunc(columnCsharp));
+                            DALFuncs.Append(GetRecordByColumnFunc(columnCsharp));
                             BLLFuncs.Append(clsBLL.getByFunc(columnCsharp));
                             BLLFuncs.Append(clsBLL.getBriefFunc(columnCsharp));
 
@@ -293,7 +306,7 @@ namespace CodeGenerator
                             clsHelper.Column columnCsharp = clsHelper.mappedColumns.Find(c => c.name == colName);
 
                             clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(columnSql));
-                            DALFuncs.Append(clsDAL.isExistsFunc(columnCsharp));
+                            DALFuncs.Append(GetIsExistsFunc(columnCsharp));
                             BLLFuncs.Append(clsBLL.isExistsFunc(columnCsharp));
 
                             string existRoles = clsPresentation.PromptForActionRoles($"ExistsBy{colName}");
@@ -313,7 +326,7 @@ namespace CodeGenerator
                             clsHelper.Column columnCsharp = clsHelper.mappedColumns.Find(c => c.name == colName);
 
                             clsHelper.allSPs.Add(clsSPs.selectAllBySP(columnSql));
-                            DALFuncs.Append(clsDAL.getAllByColumnFunc(columnCsharp));
+                            DALFuncs.Append(GetAllByColumnFunc(columnCsharp));
                             BLLFuncs.Append(clsBLL.getAllBriefByFunc(columnCsharp));
                             BLLFuncs.Append(clsBLL.getAllFullByFunc(columnCsharp));
 
@@ -335,13 +348,13 @@ namespace CodeGenerator
 
                         // GetByID
                         clsHelper.allSPs.Add(clsSPs.selectByColumnSP(firstColumn));
-                        DALFuncs.Append(clsDAL.getRecordByColumnFunc(firstColumn));
+                        DALFuncs.Append(GetRecordByColumnFunc(firstColumn));
                         BLLFuncs.Append(clsBLL.getByFunc(firstColumn));
                         BLLFuncs.Append(clsBLL.getBriefFunc(firstColumn));
                         Controller.Append(clsAPIs.getByAction(firstColumn, defaultRole));
 
                         // GetAll
-                        DALFuncs.Append(clsDAL.getAllFunc());
+                        DALFuncs.Append(GetAllFunc());
                         BLLFuncs.Append(clsBLL.getAllBriefByFunc(firstColumn));
                         BLLFuncs.Append(clsBLL.getAllFullByFunc(firstColumn));
                         Controller.Append(clsAPIs.getAllBriefByAction(firstColumn, defaultRole));
@@ -350,7 +363,6 @@ namespace CodeGenerator
                     }
                     else
                     {
-                        // Fallback to the fully manual democratic way (Original detailed prompts)
                         AnsiConsole.MarkupLine("[blue]-> Falling back to manual customizable setup...[/]");
                         string answer = "yes";
                         Console.Write("\nFor DAL, BLL, And Stored Procedures:\n");
@@ -361,7 +373,7 @@ namespace CodeGenerator
                         {
                             clsHelper.Column column = clsHelper.makeColumnByName(colName);
                             clsHelper.allSPs.Add(clsSPs.selectByColumnSP(column));
-                            DALFuncs.Append(clsDAL.getRecordByColumnFunc(column));
+                            DALFuncs.Append(GetRecordByColumnFunc(column));
                             BLLFuncs.Append(clsBLL.getByFunc(column));
                             BLLFuncs.Append(clsBLL.getBriefFunc(column));
 
@@ -375,7 +387,7 @@ namespace CodeGenerator
                         if (answer.ToLower() == "yes" || answer.ToLower() == "y")
                         {
                             clsHelper.allSPs.Add(clsSPs.updateSP());
-                            DALFuncs.Append(clsDAL.updateFunc());
+                            DALFuncs.Append(GetUpdateFunc());
                             BLLFuncs.Append(clsBLL.updateBriefFunc());
 
                             string updateRoles = clsPresentation.PromptForActionRoles("Update");
@@ -390,7 +402,7 @@ namespace CodeGenerator
                         {
                             clsHelper.Column C = clsHelper.mappedColumns[0];
                             clsHelper.allSPs.Add(clsSPs.deleteSP());
-                            DALFuncs.Append(clsDAL.deleteFunc(C));
+                            DALFuncs.Append(GetDeleteFunc(C));
                             BLLFuncs.Append(clsBLL.deleteFunc(C));
 
                             string deleteRoles = clsPresentation.PromptForActionRoles("Delete");
@@ -403,7 +415,7 @@ namespace CodeGenerator
                         if (answer.ToLower() == "yes" || answer.ToLower() == "y")
                         {
                             clsHelper.allSPs.Add(clsSPs.addSP());
-                            DALFuncs.Append(clsDAL.addFunc());
+                            DALFuncs.Append(GetAddFunc());
                             BLLFuncs.Append(clsBLL.addFunc());
 
                             string addRoles = clsPresentation.PromptForActionRoles("Add");
@@ -421,7 +433,7 @@ namespace CodeGenerator
                             {
                                 clsHelper.Column column = clsHelper.makeColumnByName(colName);
                                 clsHelper.allSPs.Add(clsSPs.isExistByColumnSP(column));
-                                DALFuncs.Append(clsDAL.isExistsFunc(column));
+                                DALFuncs.Append(GetIsExistsFunc(column));
                                 BLLFuncs.Append(clsBLL.isExistsFunc(column));
 
                                 string existRoles = clsPresentation.PromptForActionRoles($"ExistsBy{colName}");
@@ -435,7 +447,7 @@ namespace CodeGenerator
                         if (answer.ToLower() == "yes" || answer.ToLower() == "y")
                         {
                             clsHelper.allSPs.Add(clsSPs.PagingSP());
-                            DALFuncs.Append(clsDAL.PagingFunc());
+                            DALFuncs.Append(GetPagingFunc());
                             BLLFuncs.Append(clsBLL.PagingFunc());
 
                             string pagingRoles = clsPresentation.PromptForActionRoles("GetPage (Paging)");
@@ -448,7 +460,7 @@ namespace CodeGenerator
                         if (answer.ToLower() == "yes" || answer.ToLower() == "y")
                         {
                             clsHelper.Column firstColumn = clsHelper.ColumnsForCsharp[0];
-                            DALFuncs.Append(clsDAL.getAllFunc());
+                            DALFuncs.Append(GetAllFunc());
 
                             BLLFuncs.Append(clsBLL.getAllBriefByFunc(firstColumn));
                             BLLFuncs.Append(clsBLL.getAllFullByFunc(firstColumn));
@@ -467,7 +479,7 @@ namespace CodeGenerator
                                 {
                                     clsHelper.Column column = clsHelper.makeColumnByName(colName);
                                     clsHelper.allSPs.Add(clsSPs.selectAllBySP(column));
-                                    DALFuncs.Append(clsDAL.getAllByColumnFunc(column));
+                                    DALFuncs.Append(GetAllByColumnFunc(column));
 
                                     BLLFuncs.Append(clsBLL.getAllBriefByFunc(column));
                                     BLLFuncs.Append(clsBLL.getAllFullByFunc(column));
@@ -499,7 +511,6 @@ namespace CodeGenerator
                 string bll = Path.Combine(_projectDirectory, "BLL");
                 string dto = Path.Combine(_projectDirectory, "Shared", "DTOs");
 
-                // NEW: Better Structural Organization for the 4 DTOs
                 string inputsDto = Path.Combine(dto, "Inputs");
                 string outputsDto = Path.Combine(dto, "Outputs");
                 string controllersFolder = Path.Combine(_projectDirectory, "WebAPI", "Controllers");
@@ -512,7 +523,6 @@ namespace CodeGenerator
 
                 if (isUserTable)
                 {
-                    // Call the Auth logic now relocated inside clsHelper
                     await clsHelper.Auth();
                 }
                 if (!Directory.Exists(controllersFolder)) Directory.CreateDirectory(controllersFolder);
@@ -533,12 +543,12 @@ namespace CodeGenerator
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making DAL Class... ");
-                string dalCode = clsDAL.classStructure(DALFuncs);
+                string dalCode = GetClassStructure(DALFuncs); // تم استخدام الـ Wrapper الديناميكي هنا
                 using (StreamWriter writer = new StreamWriter(dalPath))
                 {
                     await writer.WriteAsync(dalCode);
                 }
-                TrackLines(dalCode); // Catch and count!
+                TrackLines(dalCode);
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making BLL Class... ");
@@ -547,7 +557,7 @@ namespace CodeGenerator
                 {
                     await writer.WriteAsync(bllCode);
                 }
-                TrackLines(bllCode); // Catch and count!
+                TrackLines(bllCode);
                 Console.WriteLine("[Done]");
 
                 Console.Write("-> Making 4 DTO Classes (Inputs/Outputs)... ");
@@ -573,15 +583,128 @@ namespace CodeGenerator
                 {
                     await writer.WriteAsync(controllerCode);
                 }
-                TrackLines(controllerCode); // Catch and count!
+                TrackLines(controllerCode);
 
-                clsHelper.TrackClass(3); // DAL, BLL, Controller
-                clsHelper.TrackDTO(4);   // Tracking the 4 new DTOs
+                clsHelper.TrackClass(3);
+                clsHelper.TrackDTO(4);
                 Console.WriteLine("[Done]");
             }
             catch (Exception ex)
             {
                 AnsiConsole.MarkupLine($"\n[red]Error while saving files:[/] {ex.Message}");
+            }
+        }
+
+        // =========================================================================
+        // 🛠️ دالات مساعدة (Wrappers) متوافقة 100% مع C# 7.3
+        // =========================================================================
+        private static string GetAuthData()
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.getAuthData();
+                case enDatabaseType.MySql: return clsMysqlDAL.getAuthData();
+                case enDatabaseType.Postgres: return clsPostgresDAL.getAuthData();
+                default: return "";
+            }
+        }
+
+        private static string GetAddFunc()
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.addFunc();
+                case enDatabaseType.MySql: return clsMysqlDAL.addFunc();
+                case enDatabaseType.Postgres: return clsPostgresDAL.addFunc();
+                default: return "";
+            }
+        }
+
+        private static string GetUpdateFunc()
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.updateFunc();
+                case enDatabaseType.MySql: return clsMysqlDAL.updateFunc();
+                case enDatabaseType.Postgres: return clsPostgresDAL.updateFunc();
+                default: return "";
+            }
+        }
+
+        private static string GetDeleteFunc(Column c)
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.deleteFunc(c);
+                case enDatabaseType.MySql: return clsMysqlDAL.deleteFunc(c);
+                case enDatabaseType.Postgres: return clsPostgresDAL.deleteFunc(c);
+                default: return "";
+            }
+        }
+
+        private static string GetRecordByColumnFunc(Column c)
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.getRecordByColumnFunc(c);
+                case enDatabaseType.MySql: return clsMysqlDAL.getRecordByColumnFunc(c);
+                case enDatabaseType.Postgres: return clsPostgresDAL.getRecordByColumnFunc(c);
+                default: return "";
+            }
+        }
+
+        private static string GetIsExistsFunc(Column c)
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.isExistsFunc(c);
+                case enDatabaseType.MySql: return clsMysqlDAL.isExistsFunc(c);
+                case enDatabaseType.Postgres: return clsPostgresDAL.isExistsFunc(c);
+                default: return "";
+            }
+        }
+
+        private static string GetPagingFunc()
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.PagingFunc();
+                case enDatabaseType.MySql: return clsMysqlDAL.PagingFunc();
+                case enDatabaseType.Postgres: return clsPostgresDAL.PagingFunc();
+                default: return "";
+            }
+        }
+
+        private static string GetAllFunc()
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.getAllFunc();
+                case enDatabaseType.MySql: return clsMysqlDAL.getAllFunc();
+                case enDatabaseType.Postgres: return clsPostgresDAL.getAllFunc();
+                default: return "";
+            }
+        }
+
+        private static string GetAllByColumnFunc(Column c)
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.getAllByColumnFunc(c);
+                case enDatabaseType.MySql: return clsMysqlDAL.getAllByColumnFunc(c);
+                case enDatabaseType.Postgres: return clsPostgresDAL.getAllByColumnFunc(c);
+                default: return "";
+            }
+        }
+
+        private static string GetClassStructure(StringBuilder injectedString)
+        {
+            switch (_selectedDbType)
+            {
+                case enDatabaseType.SqlServer: return clsMssqlDAL.classStructure(injectedString);
+                case enDatabaseType.MySql: return clsMysqlDAL.classStructure(injectedString);
+                case enDatabaseType.Postgres: return clsPostgresDAL.classStructure(injectedString);
+                default: return "";
             }
         }
     }

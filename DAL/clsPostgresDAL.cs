@@ -7,26 +7,26 @@ using static CodeGenerator.clsHelper;
 
 namespace CodeGenerator
 {
-    public class clsDAL
+    public class clsPostgresDAL
     {
         static string tabs = "        ";
-        private static string GetSqlDbType(string csharpType)
+        private static string GetNpgsqlDbType(string csharpType)
         {
             switch (csharpType.Replace("?", "").Trim())
             {
-                case "string": return "SqlDbType.NVarChar";
-                case "int": return "SqlDbType.Int";
-                case "long": return "SqlDbType.BigInt";
-                case "short": return "SqlDbType.SmallInt";
-                case "byte": return "SqlDbType.TinyInt";
-                case "decimal": return "SqlDbType.Decimal";
-                case "float": return "SqlDbType.Real";
-                case "double": return "SqlDbType.Float";
-                case "bool": return "SqlDbType.Bit";
-                case "Guid": return "SqlDbType.UniqueIdentifier";
-                case "DateTime": return "SqlDbType.DateTime";
-                case "TimeSpan": return "SqlDbType.Time";
-                default: return "SqlDbType.Variant";
+                case "string": return "NpgsqlDbType.Varchar";
+                case "int": return "NpgsqlDbType.Integer";
+                case "long": return "NpgsqlDbType.Bigint";
+                case "short": return "NpgsqlDbType.Smallint";
+                case "byte": return "NpgsqlDbType.Smallint"; // there is no tinyint in Npgsql, using Smallint instead
+                case "decimal": return "NpgsqlDbType.Numeric";
+                case "float": return "NpgsqlDbType.Real";
+                case "double": return "NpgsqlDbType.Double";
+                case "bool": return "NpgsqlDbType.Boolean";
+                case "Guid": return "NpgsqlDbType.Uuid";
+                case "DateTime": return "NpgsqlDbType.Timestamp";
+                case "TimeSpan": return "NpgsqlDbType.Time";
+                default: return "NpgsqlDbType.Unknown";
             }
         }
 
@@ -41,7 +41,7 @@ namespace CodeGenerator
             {
                 script += tabs;
                 string propPath = $"{dtoParamName}.{col.name}";
-                string dbType = GetSqlDbType(col.type);
+                string dbType = GetNpgsqlDbType(col.type);
 
                 // exact length or Max if -1
                 string sizeParam = (col.type.Contains("string") && col.length.HasValue) ? $", {col.length.Value}" : "";
@@ -120,14 +120,14 @@ namespace CodeGenerator
             string Function = $@"
         public static async Task<AuthDTO> getHashAndSalt(string Username)
         {{
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-            using SqlCommand command = new SqlCommand(""SP_{tableName}_GetSecurityDataByUsername"", connection);
+            using NpgsqlConnection connection = new NpgsqlConnection(clsDataSettings.connectionString);
+            using NpgsqlCommand command = new NpgsqlCommand(""SP_{tableName}_GetSecurityDataByUsername"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{userNameCol}"", Username);
             try
             {{
                 await connection.OpenAsync();
-                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
                 if (await reader.ReadAsync())
                 {{
                     return new AuthDTO
@@ -154,14 +154,14 @@ namespace CodeGenerator
             string Function = $@"
         public static async Task<{clsHelper.className}FullOutputDTO> {FunctionName}({C.type} {C.name})
         {{
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-            using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectBy{C.name}"", connection);
+            using NpgsqlConnection connection = new NpgsqlConnection(clsDataSettings.connectionString);
+            using NpgsqlCommand command = new NpgsqlCommand(""SP_{tableName}_SelectBy{C.name}"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{C.name}"", {C.name});
             try
             {{
                 await connection.OpenAsync();
-                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
                 if (await reader.ReadAsync())
                 {{
                     return new {clsHelper.className}FullOutputDTO
@@ -185,8 +185,8 @@ namespace CodeGenerator
         public static async Task<bool> update{objectName}({clsHelper.className}FullOutputDTO dto)
         {{
             int rowsAffected = 0;
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-            using SqlCommand command = new SqlCommand(""SP_{tableName}_Update"", connection);
+            using NpgsqlConnection connection = new NpgsqlConnection(clsDataSettings.connectionString);
+            using NpgsqlCommand command = new NpgsqlCommand(""SP_{tableName}_Update"", connection);
             command.CommandType = CommandType.StoredProcedure;
             {addParametersAllScript(false)}
             try
@@ -207,8 +207,8 @@ namespace CodeGenerator
         public static async Task<int> add{objectName}({clsHelper.className}FullOutputDTO dto)
         {{
             int {objectName}ID = -1;
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-            using SqlCommand command = new SqlCommand(""SP_{tableName}_Insert"", connection);
+            using NpgsqlConnection connection = new NpgsqlConnection(clsDataSettings.connectionString);
+            using NpgsqlCommand command = new NpgsqlCommand(""SP_{tableName}_Insert"", connection);
             command.CommandType = CommandType.StoredProcedure;
             {addParametersAllScript(true)}
             try
@@ -234,8 +234,8 @@ namespace CodeGenerator
             string Function = $@"        public static async Task<bool> delete{objectName}({C.type} {C.name})
         {{
             int rowsAffected = 0;
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-            using SqlCommand command = new SqlCommand(""SP_{tableName}_Delete"", connection);
+            using NpgsqlConnection connection = new NpgsqlConnection(clsDataSettings.connectionString);
+            using NpgsqlCommand command = new NpgsqlCommand(""SP_{tableName}_Delete"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{C.name}"", {C.name});
             try
@@ -255,14 +255,14 @@ namespace CodeGenerator
         public static async Task<List<{clsHelper.className}FullOutputDTO>> getAll()
         {{
             List<{clsHelper.className}FullOutputDTO> list = new List<{clsHelper.className}FullOutputDTO>();
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-            using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAll"", connection);
+            using NpgsqlConnection connection = new NpgsqlConnection(clsDataSettings.connectionString);
+            using NpgsqlCommand command = new NpgsqlCommand(""SP_{tableName}_SelectAll"", connection);
             command.CommandType = CommandType.StoredProcedure;
 
             try
             {{
                 await connection.OpenAsync();
-                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
                 if (reader.HasRows)
                 {{
                     while (await reader.ReadAsync())
@@ -295,15 +295,15 @@ namespace CodeGenerator
         public static async Task<List<{clsHelper.className}FullOutputDTO>> {FunctionName}({C.type} {C.name})
         {{
             List<{clsHelper.className}FullOutputDTO> list = new List<{clsHelper.className}FullOutputDTO>();
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-            using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAllBy{C.name}"", connection);
+            using NpgsqlConnection connection = new NpgsqlConnection(clsDataSettings.connectionString);
+            using NpgsqlCommand command = new NpgsqlCommand(""SP_{tableName}_SelectAllBy{C.name}"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{C.name}"", {C.name});
 
             try
             {{
                 await connection.OpenAsync();
-                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
                 if (reader.HasRows)
                 {{
                     while (await reader.ReadAsync())
@@ -334,8 +334,8 @@ namespace CodeGenerator
         public static async Task<bool> {FunctionName}({C.type} {C.name})
         {{
             bool isFound = false;
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-            using SqlCommand command = new SqlCommand(""SP_{tableName}_IsExistBy{C.name}"", connection);
+            using NpgsqlConnection connection = new NpgsqlConnection(clsDataSettings.connectionString);
+            using NpgsqlCommand command = new NpgsqlCommand(""SP_{tableName}_IsExistBy{C.name}"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{C.name}"", {C.name});
 
@@ -363,18 +363,18 @@ namespace CodeGenerator
         public static async Task<List<{clsHelper.className}FullOutputDTO>> PagingDAL(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
         {{
             List<{clsHelper.className}FullOutputDTO> list = new List<{clsHelper.className}FullOutputDTO>();
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
-            using SqlCommand command = new SqlCommand(""SP_{tableName}_Paging"", connection);
+            using NpgsqlConnection connection = new NpgsqlConnection(clsDataSettings.connectionString);
+            using NpgsqlCommand command = new NpgsqlCommand(""SP_{tableName}_Paging"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);
-            command.Parameters.AddWithValue(""@PageNumber"", PageNumber);             
+            command.Parameters.AddWithValue(""@PageNumber"", PageNumber);              
             command.Parameters.AddWithValue(""@SortColumn"", string.IsNullOrEmpty(SortColumn) ? (object)DBNull.Value : SortColumn);
             command.Parameters.AddWithValue(""@Direction"", string.IsNullOrEmpty(Direction) ? (object)DBNull.Value : Direction);    
 
             try
             {{
                 await connection.OpenAsync();
-                using SqlDataReader reader = await command.ExecuteReaderAsync();
+                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
                 if (reader.HasRows)
                 {{
                     while (await reader.ReadAsync())
@@ -395,7 +395,8 @@ namespace CodeGenerator
 
         public static string classStructure(StringBuilder injectedString)
         {
-            string structure = $@"using Microsoft.Data.SqlClient;
+            string structure = $@"using Npgsql;
+using NpgsqlTypes;
 using System;
 using System.Collections.Generic;
 using System.Data;
