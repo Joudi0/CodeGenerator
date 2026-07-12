@@ -13,7 +13,7 @@ namespace CodeGenerator
 
         // Helpers Functions:
 
-        public static string generateBriefInputToOutputMapping(string sourcePrefix = "dto.")
+        public static string generateBriefInputToOutputMapping(string sourcePrefix = "dto.", string targetPrefix = "", string endChar = ",")
         {
             string script = "";
             string indent = "                ";
@@ -28,9 +28,10 @@ namespace CodeGenerator
 
             foreach (clsHelper.Column col in columns)
             {
-                script += $"{indent}{col.name} = {sourcePrefix}{col.name},\n";
+                script += $"{indent}{targetPrefix}{col.name} = {sourcePrefix}{col.name}{endChar}\n";
             }
-            return script.TrimEnd('\n', ',');
+
+            return endChar == "," ? script.TrimEnd('\n', ',') : script.TrimEnd('\n');
         }
 
         public static string generateFullInputToOutputMapping(string sourcePrefix = "dto.")
@@ -70,30 +71,6 @@ namespace CodeGenerator
                 {
                     script += $"{indent}{col.name} = {sourcePrefix}{col.name},\n";
                 }
-            }
-            return script.TrimEnd('\n', ',');
-        }
-
-        public static string generateInputToOutputMapping(string sourcePrefix = "dto.")
-        {
-            string script = "";
-            string indent = "                ";
-            List<clsHelper.Column> columns = new List<clsHelper.Column>(clsHelper.getColumnsForCsharp());
-
-            // Exclude identity, blacklisted and system-controlled roles from input mapping since they aren't in BriefInputDTO
-            columns.RemoveAll(c => clsAPIs.blackList.Contains(c.name.ToLower()));
-            columns.RemoveAll(c =>
-                c.name.ToLower().Contains("isactive") ||
-                c.name.ToLower() == "active" ||
-                c.name.ToLower().Contains("ispremium") ||
-                c.name.ToLower() == "premium" ||
-                c.name.ToLower().Contains("roleid") ||
-                c.name.ToLower().Contains("role")
-            );
-
-            foreach (clsHelper.Column col in columns)
-            {
-                script += $"{indent}{col.name} = {sourcePrefix}{col.name},\n";
             }
             return script.TrimEnd('\n', ',');
         }
@@ -301,7 +278,7 @@ namespace CodeGenerator
             if (existingRecord == null) return false;
 
             // 2. Safely overwrite only the client-editable properties
-{generateInputToOutputOverwrite("existingRecord.", "dto.")}
+{generateBriefInputToOutputMapping("dto.", "existingRecord.", ";")}
 {passwordUpdateLogic}
             // 3. Forward the fully preserved record to the DAL layer
             return await {DALName}.update{clsHelper.objectName}(existingRecord);
