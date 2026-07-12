@@ -119,7 +119,7 @@ namespace CodeGenerator
             string functionName = (columnIndex == 0) ? $"get{clsHelper.objectName}BriefOutputByID" : $"get{clsHelper.objectName}BriefOutputBy{C.name}";
             string dalFunctionName = (columnIndex == 0) ? $"get{clsHelper.objectName}ByID" : $"get{clsHelper.objectName}By{C.name}";
 
-            StringBuilder compositionPopulation = new StringBuilder();
+            StringBuilder briefComposition = new StringBuilder();
             foreach (var col in clsHelper.mappedColumns)
             {
                 if (col.composition)
@@ -129,29 +129,24 @@ namespace CodeGenerator
                     string cleanProp = col.name.Substring(0, col.name.Length - 2);
                     string propName = char.ToUpper(cleanProp[0]) + cleanProp.Substring(1) + "Details";
                     string cleanType = col.type.Replace("?", "");
-
-                    compositionPopulation.AppendLine();
-                    compositionPopulation.AppendLine($"            // Populate nested object before mapping to brief");
-                    compositionPopulation.AppendLine($"            if (fullDto.{col.name} != default)");
-                    compositionPopulation.AppendLine($"            {{");
-                    compositionPopulation.AppendLine($"                fullDto.{propName} = await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})fullDto.{col.name});");
-                    compositionPopulation.AppendLine($"            }}");
+                    // Directly populate the nested object using the specialized Brief method, if the foreign key is not default
+                    briefComposition.AppendLine($"                {propName} = fullDto.{col.name} != default ? await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})fullDto.{col.name}) : null,");
                 }
             }
 
             return $@"
-        public static async Task<{clsHelper.className}BriefOutputDTO> {functionName}({C.type} {C.name})
-        {{
-            // Fetch the full flat record from DAL
-            var fullDto = await {DALName}.{dalFunctionName}({C.name});
-            if (fullDto == null) return null;
-{compositionPopulation}
-            // Map it instantly in memory to BriefOutputDTO
-            return new {clsHelper.className}BriefOutputDTO
-            {{
-{generateBriefMapping("fullDto.")}
-            }};
-        }}";
+public static async Task<{clsHelper.className}BriefOutputDTO> {functionName}({C.type} {C.name})
+{{
+    // Fetch the full flat record from DAL
+    var fullDto = await {DALName}.{dalFunctionName}({C.name});
+    if (fullDto == null) return null;
+
+    // Map it instantly in memory to BriefOutputDTO and populate its specific brief nested objects
+    return new {clsHelper.className}BriefOutputDTO
+    {{
+{briefComposition}{generateBriefMapping("fullDto.")}
+    }};
+}}";
         }
 
         public static string getByFunc(clsHelper.Column C)
@@ -501,7 +496,7 @@ namespace CodeGenerator
             string BLLparam = (columnIndex == 0) ? "" : $"{C.type} {C.name}";
             string DALparam = (columnIndex == 0) ? "" : $"{C.name}";
 
-            StringBuilder compositionPopulation = new StringBuilder();
+            StringBuilder briefComposition = new StringBuilder();
             foreach (var col in clsHelper.mappedColumns)
             {
                 if (col.composition)
@@ -512,34 +507,26 @@ namespace CodeGenerator
                     string propName = char.ToUpper(cleanProp[0]) + cleanProp.Substring(1) + "Details";
                     string cleanType = col.type.Replace("?", "");
 
-                    compositionPopulation.AppendLine();
-                    compositionPopulation.AppendLine($"                // Populate nested object for brief list item");
-                    compositionPopulation.AppendLine($"                if (item.{col.name} != default)");
-                    compositionPopulation.AppendLine($"                {{");
-                    compositionPopulation.AppendLine($"                    item.{propName} = await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})item.{col.name});");
-                    compositionPopulation.AppendLine($"                }}");
+                    // بنجهز السطر لينزل فوراً بقلب الـ Object Initializer تبع الـ BriefDTO النهائي
+                    briefComposition.AppendLine($"                {propName} = item.{col.name} != default ? await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})item.{col.name}) : null,");
                 }
             }
 
-            string compositionLoop = compositionPopulation.Length > 0 ? compositionPopulation.ToString() : "";
-
-            return $@"
-        public static async Task<List<{clsHelper.className}BriefOutputDTO>> {functionName}({BLLparam})
+            return $@"        public static async Task<List<{clsHelper.className}BriefOutputDTO>> {functionName}({BLLparam})
         {{
             List<{clsHelper.className}FullOutputDTO> fullList = await {DALName}.{dalFunctionName}({DALparam});
             List<{clsHelper.className}BriefOutputDTO> briefList = new List<{clsHelper.className}BriefOutputDTO>();
-                
-            foreach ({clsHelper.className}FullOutputDTO item in fullList)
+            
+            if (fullList == null) return briefList;
+
+            foreach (var item in fullList)
             {{
-{compositionLoop}
                 briefList.Add(new {clsHelper.className}BriefOutputDTO
                 {{
-{generateBriefMapping("item.")}
-                }});
+{briefComposition}{generateBriefMapping("item.")}                }});
             }}
             return briefList;
-        }}
-";
+        }}";
         }
 
         public static string getAllFullByFunc(clsHelper.Column C)
@@ -564,15 +551,14 @@ namespace CodeGenerator
                     compositionPopulation.AppendLine();
                     compositionPopulation.AppendLine($"                if (item.{col.name} != default)");
                     compositionPopulation.AppendLine($"                {{");
-                    compositionPopulation.AppendLine($"                    item.{propName} = await {targetBLL}.get{baseEntity}BriefOutputByID(({cleanType})item.{col.name});");
+                    compositionPopulation.AppendLine($"                    item.{propName} = await {targetBLL}.get{baseEntity}ByID(({cleanType})item.{col.name});");
                     compositionPopulation.AppendLine($"                }}");
                 }
             }
 
             string compositionLoop = compositionPopulation.Length > 0 ? $@"
             foreach (var item in fullList)
-            {{
-{compositionPopulation}            }}" : "";
+            {{{compositionPopulation}            }}" : "";
 
             return $@"
         public static async Task<List<{clsHelper.className}FullOutputDTO>> {functionName}({BLLparam})
