@@ -183,10 +183,12 @@
     <Compile Include="clsHelper.cs" />
     <Compile Include="DAL\clsMysqlDAL.cs" />
     <Compile Include="clsPresentation.cs" />
-    <Compile Include="clsSPs.cs" />
+    <Compile Include="SPs\clsMssqlSPs.cs" />
     <Compile Include="DAL\clsPostgresDAL.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SPs\clsMysqlSPs.cs" />
+    <Compile Include="SPs\clsPostgresSPs.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

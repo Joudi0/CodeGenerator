@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace CodeGenerator
 {
-    internal class clsSPs
+    internal class clsMssqlSPs
     {
 
         // Helpers
