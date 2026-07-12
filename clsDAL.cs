@@ -10,7 +10,27 @@ namespace CodeGenerator
     public class clsDAL
     {
         static string tabs = "        ";
-        public static string addWithValueAllScript(bool withoutFirst = true, string dtoParamName = "dto")
+        private static string GetSqlDbType(string csharpType)
+        {
+            switch (csharpType.Replace("?", "").Trim())
+            {
+                case "string": return "SqlDbType.NVarChar";
+                case "int": return "SqlDbType.Int";
+                case "long": return "SqlDbType.BigInt";
+                case "short": return "SqlDbType.SmallInt";
+                case "byte": return "SqlDbType.TinyInt";
+                case "decimal": return "SqlDbType.Decimal";
+                case "float": return "SqlDbType.Real";
+                case "double": return "SqlDbType.Float";
+                case "bool": return "SqlDbType.Bit";
+                case "Guid": return "SqlDbType.UniqueIdentifier";
+                case "DateTime": return "SqlDbType.DateTime";
+                case "TimeSpan": return "SqlDbType.Time";
+                default: return "SqlDbType.Variant";
+            }
+        }
+
+        public static string addParametersAllScript(bool withoutFirst = true, string dtoParamName = "dto")
         {
             System.Collections.Generic.List<Column> newColumns = new System.Collections.Generic.List<Column>(getColumnsForCsharp());
             if (withoutFirst) newColumns.RemoveAt(0);
@@ -21,36 +41,24 @@ namespace CodeGenerator
             {
                 script += tabs;
                 string propPath = $"{dtoParamName}.{col.name}";
+                string dbType = GetSqlDbType(col.type);
+
+                // exact length or Max if -1
+                string sizeParam = (col.type.Contains("string") && col.length.HasValue) ? $", {col.length.Value}" : "";
 
                 if (col.isNullable.ToUpper() == "NO")
                 {
-                    script += $@"command.Parameters.AddWithValue(@""{col.name}"", {propPath});";
+                    script += $@"command.Parameters.Add(@""{col.name}"", {dbType}{sizeParam}).Value = {propPath};";
                 }
                 else if (col.isNullable.ToUpper() == "YES")
                 {
-                    switch (col.type)
+                    if (col.type == "string")
                     {
-                        case "string":
-                            script += $@"command.Parameters.AddWithValue(@""{col.name}"", string.IsNullOrEmpty({propPath}) ? DBNull.Value : (object){propPath});";
-                            break;
-
-                        case "int?":
-                        case "long?":
-                        case "short?":
-                        case "byte?":
-                        case "decimal?":
-                        case "float?":
-                        case "double?":
-                        case "bool?":
-                        case "Guid?":
-                        case "DateTime?":
-                        case "TimeSpan?":
-                            script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == null) ? DBNull.Value : (object){propPath});";
-                            break;
-
-                        default:
-                            script += $@"command.Parameters.AddWithValue(@""{col.name}"", ({propPath} == null) ? DBNull.Value : (object){propPath});";
-                            break;
+                        script += $@"command.Parameters.Add(@""{col.name}"", {dbType}{sizeParam}).Value = string.IsNullOrEmpty({propPath}) ? DBNull.Value : (object){propPath};";
+                    }
+                    else
+                    {
+                        script += $@"command.Parameters.Add(@""{col.name}"", {dbType}{sizeParam}).Value = ({propPath} == null) ? DBNull.Value : (object){propPath};";
                     }
                 }
             }
@@ -180,7 +188,7 @@ namespace CodeGenerator
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Update"", connection);
             command.CommandType = CommandType.StoredProcedure;
-            {addWithValueAllScript(false)}
+            {addParametersAllScript(false)}
             try
             {{
                 await connection.OpenAsync();
@@ -202,7 +210,7 @@ namespace CodeGenerator
             using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Insert"", connection);
             command.CommandType = CommandType.StoredProcedure;
-            {addWithValueAllScript(true)}
+            {addParametersAllScript(true)}
             try
             {{
                 await connection.OpenAsync();
