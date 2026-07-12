@@ -529,12 +529,25 @@ namespace Shared
             TrackLines(projectPoliciesCode);
 
             // Adding clsDataSettings to DAL project infrastructure
-            string dataSettingsPath = Path.Combine(dalFolder, "clsDataSettings.cs");
-            string dataSettingsCode = $@"namespace DAL
+            string dataSettingsPath = Path.Combine(dalFolder, Prefix,"DataSettings.cs");
+            string dataSettingsCode = $@"using Microsoft.Extensions.Configuration;
+using System.IO;
+
+namespace DAL
 {{
-    public static class clsDataSettings
+    public static class {Prefix}DataSettings
     {{
-        public static string connectionString = ""{ConfigurationManager.ConnectionStrings["connectionStrings"].ConnectionString}"";
+        public static string connectionString;
+
+        static {Prefix}DataSettings()
+        {{
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile(""appsettings.json"", optional: false, reloadOnChange: true);
+
+            IConfiguration configuration = builder.Build();
+            connectionString = configuration.GetConnectionString(""DefaultConnection"");
+        }}
     }}
 }}";
             File.WriteAllText(dataSettingsPath, dataSettingsCode);
@@ -549,6 +562,11 @@ namespace Shared
             // for broken old .net file:
             RunDotNetCommand(webApiFolder, "add package Scalar.AspNetCore");
             RunDotNetCommand(webApiFolder, "setProperty NoWarn NU1903");
+
+            // so DAL Configuration works, we need to add the following packages to DAL project
+            RunDotNetCommand(dalFolder, "add package Microsoft.Extensions.Configuration");
+            RunDotNetCommand(dalFolder, "add package Microsoft.Extensions.Configuration.Json");
+            RunDotNetCommand(dalFolder, "add package Microsoft.Extensions.Configuration.Binder");
         }
 
         private static void RunDotNetCommand(string workingDirectory, string arguments)

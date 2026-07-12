@@ -120,7 +120,7 @@ namespace CodeGenerator
             string Function = $@"
         public static async Task<AuthDTO> getHashAndSalt(string Username)
         {{
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlConnection connection = new SqlConnection({clsHelper.Prefix}DataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_GetSecurityDataByUsername"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{userNameCol}"", Username);
@@ -154,7 +154,7 @@ namespace CodeGenerator
             string Function = $@"
         public static async Task<{clsHelper.className}FullOutputDTO> {FunctionName}({C.type} {C.name})
         {{
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlConnection connection = new SqlConnection({clsHelper.Prefix}DataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectBy{C.name}"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{C.name}"", {C.name});
@@ -185,7 +185,7 @@ namespace CodeGenerator
         public static async Task<bool> update{objectName}({clsHelper.className}FullOutputDTO dto)
         {{
             int rowsAffected = 0;
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlConnection connection = new SqlConnection({clsHelper.Prefix}DataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Update"", connection);
             command.CommandType = CommandType.StoredProcedure;
             {addParametersAllScript(false)}
@@ -207,7 +207,7 @@ namespace CodeGenerator
         public static async Task<int> add{objectName}({clsHelper.className}FullOutputDTO dto)
         {{
             int {objectName}ID = -1;
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlConnection connection = new SqlConnection({clsHelper.Prefix}DataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Insert"", connection);
             command.CommandType = CommandType.StoredProcedure;
             {addParametersAllScript(true)}
@@ -234,7 +234,7 @@ namespace CodeGenerator
             string Function = $@"        public static async Task<bool> delete{objectName}({C.type} {C.name})
         {{
             int rowsAffected = 0;
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlConnection connection = new SqlConnection({clsHelper.Prefix}DataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Delete"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{C.name}"", {C.name});
@@ -255,7 +255,7 @@ namespace CodeGenerator
         public static async Task<List<{clsHelper.className}FullOutputDTO>> getAll()
         {{
             List<{clsHelper.className}FullOutputDTO> list = new List<{clsHelper.className}FullOutputDTO>();
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlConnection connection = new SqlConnection({clsHelper.Prefix}DataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAll"", connection);
             command.CommandType = CommandType.StoredProcedure;
 
@@ -295,7 +295,7 @@ namespace CodeGenerator
         public static async Task<List<{clsHelper.className}FullOutputDTO>> {FunctionName}({C.type} {C.name})
         {{
             List<{clsHelper.className}FullOutputDTO> list = new List<{clsHelper.className}FullOutputDTO>();
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlConnection connection = new SqlConnection({clsHelper.Prefix}DataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_SelectAllBy{C.name}"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{C.name}"", {C.name});
@@ -334,7 +334,7 @@ namespace CodeGenerator
         public static async Task<bool> {FunctionName}({C.type} {C.name})
         {{
             bool isFound = false;
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlConnection connection = new SqlConnection({clsHelper.Prefix}DataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_IsExistBy{C.name}"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@{C.name}"", {C.name});
@@ -363,7 +363,7 @@ namespace CodeGenerator
         public static async Task<List<{clsHelper.className}FullOutputDTO>> PagingDAL(int RowsPerPage, int PageNumber, string SortColumn, string Direction)
         {{
             List<{clsHelper.className}FullOutputDTO> list = new List<{clsHelper.className}FullOutputDTO>();
-            using SqlConnection connection = new SqlConnection(clsDataSettings.connectionString);
+            using SqlConnection connection = new SqlConnection({clsHelper.Prefix}DataSettings.connectionString);
             using SqlCommand command = new SqlCommand(""SP_{tableName}_Paging"", connection);
             command.CommandType = CommandType.StoredProcedure;
             command.Parameters.AddWithValue(""@RowsPerPage"", RowsPerPage);
