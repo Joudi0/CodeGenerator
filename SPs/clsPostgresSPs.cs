@@ -67,9 +67,19 @@ namespace CodeGenerator
         {
             clsHelper.Column idCol = clsHelper.Columns[0];
             return $@"
-            CREATE OR REPLACE FUNCTION public.sp_{clsHelper.tableName.ToLower()}_insert(
-            {GetSPParameters()}
-            ) RETURNS INTEGER AS $$             #variable_conflict use_variable             DECLARE inserted_id INTEGER;             BEGIN                 INSERT INTO {clsHelper.tableName} ({GetColumnNames()})                 VALUES ({GetParameterValues()})                 RETURNING ""{idCol.name}"" INTO inserted_id;                 RETURN inserted_id;             END;             $$ LANGUAGE plpgsql;";
+    CREATE OR REPLACE FUNCTION public.sp_{clsHelper.tableName.ToLower()}_insert(
+    {GetSPParameters()}
+    ) RETURNS INTEGER AS $$
+    --variable_conflict use_variable
+    DECLARE 
+        inserted_id INTEGER;
+    BEGIN
+        INSERT INTO {clsHelper.tableName} ({GetColumnNames()})
+        VALUES ({GetParameterValues()})
+        RETURNING ""{idCol.name}"" INTO inserted_id;
+        RETURN inserted_id;
+    END;
+    $$ LANGUAGE plpgsql;";
         }
 
         public static string updateSP()

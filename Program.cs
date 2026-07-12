@@ -15,7 +15,7 @@ namespace CodeGenerator
         private static string _globalDefaultRole = "Admin";
         private static string prefix = "";
 
-        // الـ Enum لتحديد نوع قاعدة البيانات
+        //  Enum for Database Types
         public enum enDatabaseType { SqlServer, MySql, Postgres }
         private static enDatabaseType _selectedDbType;
 
@@ -23,15 +23,15 @@ namespace CodeGenerator
         {
             Console.OutputEncoding = Encoding.UTF8;
             AnsiConsole.Write(
-                                new FigletText("Code Generator")
+                                new FigletText("Zagros Framework")
                                     .Centered()
                                     .Color(Color.Green));
 
-            AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator v3.0 (Stable) [/]").Justify(Justify.Left));
+            AnsiConsole.Write(new Rule("[yellow]Welcome in Joudi's Code Generator v3.0 (Stable) [/]").Justify(Justify.Center));
             AnsiConsole.MarkupLine("[grey]This tool generates SPs, DAL, BLL, Controllers, and Security For you.[/]");
             AnsiConsole.MarkupLine("[red]Notice:[/] Please ensure database settings are configured in [cyan]clsHelper.connectionString[/].\n");
 
-            // برومبت باستخدام Spectre.Console لاختيار الداتابيز
+            // Choose Database Type
             _selectedDbType = AnsiConsole.Prompt(
                 new SelectionPrompt<enDatabaseType>()
                     .Title("Select target [yellow]Database Type[/] for Code Generation:")
@@ -66,7 +66,7 @@ namespace CodeGenerator
                 {
                     await Run(tName);
                     Console.Clear();
-                    AnsiConsole.Write(new FigletText("ADO Gen Code").Centered().Color(Color.Green));
+                    AnsiConsole.Write(new FigletText("Zagros Framework").Centered().Color(Color.Green));
                     AnsiConsole.WriteLine();
                     AnsiConsole.WriteLine();
                 }
